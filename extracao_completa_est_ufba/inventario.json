@@ -1,0 +1,286 @@
+{
+    "paginas": [
+        {
+            "url": "https://est.ufba.br/",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/index.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/40-anos-do-curso-de-bacharelado-em-estatistica-0",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_40-anos-do-curso-de-bacharelado-em-estatistica-0.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/selecao-para-monitoria-bolsistas-e-voluntarios-20261",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_selecao-para-monitoria-bolsistas-e-voluntarios-20261.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/resultado-da-chamada-publica-para-selecao-de-projetos-para-20252",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_resultado-da-chamada-publica-para-selecao-de-projetos-para-20252.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/chamada-publica-para-selecao-de-projetos-para-20252",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_chamada-publica-para-selecao-de-projetos-para-20252.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/programacao-completa-area-de-estatistica-ix-epgmat",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_programacao-completa-area-de-estatistica-ix-epgmat.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/ix-encontro-da-pos-graduacao-em-matematica-da-ufba-epgmat",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_ix-encontro-da-pos-graduacao-em-matematica-da-ufba-epgmat.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/vii-wasa-workshop-em-analise-de-sobrevivencia-e-aplicacoes",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_vii-wasa-workshop-em-analise-de-sobrevivencia-e-aplicacoes.html"
+        },
+        {
+            "url": "https://est.ufba.br/noticias",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/noticias.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br.html"
+        },
+        {
+            "url": "https://est.ufba.br/en",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/en.html"
+        },
+        {
+            "url": "https://est.ufba.br/pt-br/departamento",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/pt-br_departamento.html"
+        },
+        {
+            "url": "https://est.ufba.br/en/professores-visitantes",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/en_professores-visitantes.html"
+        },
+        {
+            "url": "https://est.ufba.br/en/pos-graduacao",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/en_pos-graduacao.html"
+        },
+        {
+            "url": "https://est.ufba.br/en/node/8",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/en_node_8.html"
+        },
+        {
+            "url": "https://est.ufba.br/en/node/9",
+            "arquivo": "/home/ubuntu/extracao_ufba/paginas/en_node_9.html"
+        }
+    ],
+    "imagens": [
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/slideshow/public/40anos.jpeg?itok=WHABq0Ct",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/40anos.jpeg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/slideshow/public/topo-site-negativo2.png?itok=VGNNu7gi",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/topo-site-negativo2.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/slideshow/public/ecd_banner.jpeg?itok=aJ782l3p",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/ecd_banner.jpeg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/slideshow/public/Ufba-v1.jpg?itok=AijPGfWr",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/Ufba-v1.jpg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/slideshow/public/IMG3.jpg?itok=7jKVuyZm",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/IMG3.jpg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/modules/languageicons/flags/pt-br.png",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/pt-br.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/modules/languageicons/flags/en.png",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/en.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/facebook1.png",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/facebook1.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/instagram1.png",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/instagram1.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/large/public/field/image/cartaz_vii_wasa_2.png?itok=6vtWt4QT",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/cartaz_vii_wasa_2.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/edbrito/cartaz_vii_wasa.jpeg",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/cartaz_vii_wasa.jpeg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/styles/medium/public/field/image/cartaz_vii_wasa_2.png?itok=QDc0uKqN",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/cartaz_vii_wasa_2.png"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/img_0065.jpg",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/img_0065.jpg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/olawale.jpg",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/olawale.jpg"
+        },
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/rahim.jpg",
+            "arquivo": "/home/ubuntu/extracao_ufba/imagens/rahim.jpg"
+        }
+    ],
+    "pdfs": [
+        {
+            "url": "https://est.ufba.br/sites/est.ufba.br/files/edbrito/chamada_publica_para_selecao_de_projetos_para_2025_assinado.pdf",
+            "arquivo": "/home/ubuntu/extracao_ufba/pdfs/chamada_publica_para_selecao_de_projetos_para_2025_assinado.pdf"
+        }
+    ],
+    "outros_links": [
+        "http://www.est.ufba.br",
+        "http://www.cer.ufba.br/",
+        "http://ime.ufba.br/",
+        "http://www.ecd.ufba.br/",
+        "https://www.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://forms.gle/WY5BgzgruNWR6Muf8",
+        "https://forms.gle/vBAHeyQYUmfYtYpu9",
+        "https://forms.gle/adyeCgsYHgD9NBD3A",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://drive.google.com/file/d/KvEHet-hFQeMI09HQwJ/view?usp=drive_link",
+        "https://drive.google.com/file/d/KvEHet-hFQeMI09HQwJ/view?usp=drive_link",
+        "https://drive.google.com/file/d/KvEHet-hFQeMI09HQwJ/view?usp=drive_link",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://docs.google.com/forms/d/e/1FAIpQLSfFIoUw6Fejw673VAOfKxo4amzNEqXGhWrbyDsqSevPn4mUJA/viewform",
+        "http://www.est.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://www.inscricao9epgmat.ufba.br/",
+        "http://https://www.inscricao9epgmat.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://encontropgmat.ufba.br/",
+        "http://www.inscricao9epgmat.ufba.br/",
+        "https://forms.gle/dFiAG6UA584KirTk6",
+        "https://drive.google.com/file/d/1AmI_4Vp6C8T5LAjThFKuHxpTpjGtsbRe/view?usp=drive_link",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://viiwasa.softaliza.com.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://www.inscricao9epgmat.ufba.br/",
+        "http://https://www.inscricao9epgmat.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.cer.ufba.br/",
+        "http://ime.ufba.br/",
+        "http://www.ecd.ufba.br/",
+        "https://www.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.cer.ufba.br/",
+        "http://ime.ufba.br/",
+        "http://www.ecd.ufba.br/",
+        "https://www.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.instagram.com/dest_ufba/",
+        "https://br.linkedin.com/company/dest-ufba",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://buscatextual.cnpq.br/buscatextual/visualizacv.do?metodo=apresentar&id=K42...",
+        "http://lattes.cnpq.br/9172936827166614",
+        "http://profs.basu.ac.ir/mahmoudvand/index.php?L=en&pc=",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "https://pgecd.ufba.br/",
+        "http://www.ecd.ufba.br/",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/",
+        "http://www.est.ufba.br",
+        "http://www.worldofstatistics.org/",
+        "https://mail.ufba.br",
+        "http://www.sibi.ufba.br/",
+        "http://www.moodle.ufba.br",
+        "https://www.facebook.com/departamentoestatistica/",
+        "https://www.instagram.com/dest_ufba/"
+    ]
+}

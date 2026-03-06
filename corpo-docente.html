@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corpo Docente - DEst | IME/UFBA</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Top Header -->
+        <header class="top-header">
+            <div class="header-container">
+                <a href="index.html" class="header-brand">
+                    <i class="fa-solid fa-chart-column logo-icon"></i>
+                    <div class="brand-text">
+                        <h1>Departamento de Estatística</h1>
+                        <span>Instituto de Matemática e Estatística • UFBA</span>
+                    </div>
+                </a>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" placeholder="Pesquisar professor...">
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-wrapper">
+            <!-- Sidebar -->
+            <aside class="modern-sidebar">
+                <nav class="nav-menu">
+                    <p class="nav-title">Menu Principal</p>
+                    <a href="index.html" class="nav-item"><i class="fa-solid fa-house"></i> Início</a>
+
+                    <div class="nav-group">
+                        <button class="nav-item has-dropdown"><i class="fa-solid fa-building-columns"></i>
+                            Institucional
+                            <i class="fa-solid fa-chevron-down arrow"></i></button>
+                        <div class="dropdown-content">
+                            <a href="pages/departamento.html">Sobre o DEst</a>
+                            <a href="pages/historico.html">Histórico</a>
+                            <a href="#">Eventos</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-group">
+                        <button class="nav-item has-dropdown"><i class="fa-solid fa-graduation-cap"></i> Ensino <i
+                                class="fa-solid fa-chevron-down arrow"></i></button>
+                        <div class="dropdown-content">
+                            <a href="pages/graduacao.html">Graduação</a>
+                            <a href="pages/pos-graduacao.html">Pós-Graduação</a>
+                            <a href="#">Disciplinas</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-group open">
+                        <button class="nav-item has-dropdown"><i class="fa-solid fa-users"></i> Pessoas <i
+                                class="fa-solid fa-chevron-down arrow"></i></button>
+                        <div class="dropdown-content">
+                            <a href="corpo-docente.html" class="active-link">Corpo Docente</a>
+                            <a href="pages/professores-visitantes.html">Professores Visitantes</a>
+                        </div>
+                    </div>
+
+                    <!-- ... Outros grupos omitidos para brevidade mas manteriam a estrutura ... -->
+                    <div class="sidebar-divider"></div>
+                    <a href="index.html" class="nav-item"><i class="fa-solid fa-arrow-left"></i> Voltar ao Início</a>
+                </nav>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="content-area">
+                <div class="content-grid">
+                    <nav class="breadcrumb">
+                        <a href="index.html">Início</a>
+                        <i class="fa-solid fa-chevron-right"></i>
+                        <span>Pessoas</span>
+                        <i class="fa-solid fa-chevron-right"></i>
+                        <span class="current">Corpo Docente</span>
+                    </nav>
+
+                    <div class="page-hero">
+                        <div class="page-hero-icon">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div>
+                            <h2>Corpo Docente</h2>
+                            <p>Professores e pesquisadores do Departamento de Estatística</p>
+                        </div>
+                    </div>
+
+                    <div class="people-grid" id="docentes-grid">
+                        <!-- Cards will be populated by JS -->
+                        <div class="loading-state">Carregando docentes...</div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <footer class="main-footer">
+            <div class="footer-container">
+                <div class="footer-brand">
+                    <img src="assets/logoufba.png" alt="UFBA" class="footer-logo">
+                    <p>Departamento de Estatística<br>IME • UFBA</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 DEst-UFBA</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/main.js"></script>
+    <script src="js/docentes.js"></script>
+</body>
+
+</html>
