@@ -174,23 +174,29 @@ def page_solicitar_publicacao():
     """)
     st.divider()
 
+    # Força layout centralizado especificamente para esta página
+    st.markdown("""
+        <style>
+        .block-container {
+            max-width: 800px !important;
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            margin: 0 auto;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # --- Gambiarra para manter seleção obrigatória no segmented_control ---
-    if "un_sticky" not in st.session_state: st.session_state.un_sticky = "Estatística"
-    if "am_sticky" not in st.session_state: st.session_state.am_sticky = "Departamento"
+    if "un_sticky" not in st.session_state: st.session_state.un_sticky = "Depto de Estatística"
     if "ch_sticky" not in st.session_state: st.session_state.ch_sticky = ["Instagram", "Site Oficial"]
     
     # Armazenam o último valor válido para restauração
-    if "un_last" not in st.session_state: st.session_state.un_last = "Estatística"
-    if "am_last" not in st.session_state: st.session_state.am_last = "Departamento"
+    if "un_last" not in st.session_state: st.session_state.un_last = "Depto de Estatística"
     if "ch_last" not in st.session_state: st.session_state.ch_last = ["Instagram", "Site Oficial"]
 
     def sync_un():
         if st.session_state.un_sticky is None: st.session_state.un_sticky = st.session_state.un_last
         else: st.session_state.un_last = st.session_state.un_sticky
-
-    def sync_am():
-        if st.session_state.am_sticky is None: st.session_state.am_sticky = st.session_state.am_last
-        else: st.session_state.am_last = st.session_state.am_sticky
 
     def sync_ch():
         if not st.session_state.ch_sticky: st.session_state.ch_sticky = st.session_state.ch_last
@@ -221,26 +227,45 @@ def page_solicitar_publicacao():
     ]
 
     unidade = st.segmented_control(
-        "Departamento de Origem", ["Estatística", "Matemática"], 
+        "Unidade", ["Depto de Estatística", "Depto de Matemática", "IME", "NEX"], 
         selection_mode="single", key="un_sticky", on_change=sync_un
     )
     
-    # Lógica de seleção de docente dependente da unidade
+    # Lógica de exibição e seleção
     solicitante = None
-    if unidade:
-        lista_docentes = sorted(DOCENTES_DEST) if unidade == "Estatística" else sorted(DOCENTES_DMAT)
-            
-        solicitante = st.selectbox(
-            "Docente Solicitante", 
-            lista_docentes, 
-            index=None, 
-            placeholder="Selecione o docente...",
-        )
+    postando_como = None
     
-    ambito = st.segmented_control(
-        "Setor Solicitante", ["Departamento", "Colegiado", "Pós-Graduação"], 
-        selection_mode="single", key="am_sticky", on_change=sync_am
-    )
+    if unidade:
+        if unidade == "Depto de Estatística":
+            lista_solicitantes = sorted(DOCENTES_DEST)
+            opcoes_postando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
+        elif unidade == "Depto de Matemática":
+            lista_solicitantes = sorted(DOCENTES_DMAT)
+            opcoes_postando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
+        elif unidade == "IME":
+            lista_solicitantes = sorted(["Ricardo Rocha", "Giovana Silva", "Cristina", "Kleyber"])
+            opcoes_postando = ["Diretor do Instituto", "Núcleo de Comunicações", "Técnico Administrativo", "Técnico de Informática", "Outro"]
+        elif unidade == "NEX":
+            lista_solicitantes = sorted(["Giovana Silva", "Cristina"])
+            opcoes_postando = ["Coordenador do NEX", "Membro da Equipe", "Voluntário de Extensão", "Outro"]
+            
+        colA, colB = st.columns(2)
+        with colA:
+            solicitante = st.selectbox(
+                "Docente / Nome do Solicitante", 
+                lista_solicitantes, 
+                index=None, 
+                placeholder="Selecione o nome...",
+            )
+        with colB:
+            postando_como = st.selectbox(
+                "Postando como:", 
+                opcoes_postando, 
+                index=None, 
+                placeholder="Selecione o cargo/papel...",
+            )
+    
+
 
     lista_demandas = [
         "Defesa de Mestrado", "Defesa de Doutorado", "Qualificação (Mestr/Dout)",
@@ -283,7 +308,6 @@ def page_solicitar_publicacao():
 
     st.divider()
     st.markdown("### 📎 2. Descrição e Anexos")
-    st.info("No campo abaixo, escreva a **descrição completa** (links, horários, local) e **anexe seus materiais**. Diga tudo o que for necessário para a criação do post.")
 
     # CSS para aumentar a área de escrita do chat_input
     st.markdown("""
@@ -294,65 +318,76 @@ def page_solicitar_publicacao():
         </style>
     """, unsafe_allow_html=True)
 
-    # Colocando o chat_input dentro de um container
+    # Gerenciamento de estado para armazenar os dados do chat_input antes do envio final
+    if "pedido_tmp" not in st.session_state:
+        st.session_state.pedido_tmp = None
+
     with st.container(border=True):
         solicitacao_input = st.chat_input(
-            "Descreva os detalhes aqui e anexe seus materiais (PDF, Imagens, Vídeos, Áudios)...",
+            "Descreva detalhadamente a sua solicitação (fornecendo URLs, horários, locais, objetivos e público-alvo pretendido). Utilize o ícone de anexo lateral para incluir materiais adicionais (arquivos PDF, cartazes, imagens ou áudios). Após o preenchimento, confirme o envio nesta barra para habilitar o botão de Finalizar Solicitação, exibido logo abaixo.",
             accept_file="multiple",
             accept_audio=True
         )
 
     if solicitacao_input:
-        if not solicitante:
-            st.error("❌ Favor selecionar o **Docente Solicitante**.")
-        elif not data_valida:
-            st.error("❌ O agendamento deve ter no mínimo 24h de antecedência.")
-        else:
-            with st.status("🚀 Registrando sua solicitação e subindo anexos...", expanded=True) as status:
-                descricao_final = solicitacao_input.text or ""
-                arquivos = solicitacao_input.files or []
-                audio_gravado = solicitacao_input.audio
-                
-                links_final = []
-                
-                # Processamento de Arquivos Selecionados
-                for f in arquivos:
-                    status.write(f"📤 Subindo arquivo: {f.name}...")
-                    url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
-                    if url_storage:
-                        links_final.append(url_storage)
-                
-                # Processamento de Áudio Gravado
-                if audio_gravado:
-                    status.write("🎤 Subindo áudio gravado...")
-                    nome_wav = f"rec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-                    url_audio = upload_to_storage(audio_gravado.getvalue(), nome_wav, "audio/wav")
-                    if url_audio:
-                        links_final.append(url_audio)
-                
-                # Persistência no Firestore
-                dados_solicitacao = {
-                    "unidade": unidade,
-                    "solicitante": solicitante,
-                    "ambito": ambito,
-                    "tipo": tipo_demanda,
-                    "data_publicacao": data_pub, # Agora enviando como objeto datetime (Timestamp no Firestore)
-                    "canais": ", ".join(canais),
-                    "descricao": descricao_final,
-                    "anexos": links_final,
-                    "data_solicitacao": datetime.now(), # Agora como datetime.now() local para bater com data_pub
-                    "status": "Pendente",
-                    "urgencia": urgencia
-                }
-                
-                sucesso, msg_erro = adicionar_documento("solicitacoes", dados_solicitacao)
-                if sucesso:
-                    status.update(label="✅ Solicitação registrada com sucesso!", state="complete", expanded=False)
-                    st.balloons()
-                    msg_urg = " (Tratada como URGENTE)" if urgencia else ""
-                    st.success(f"Tudo pronto, Prof. {solicitante}! Sua demanda{msg_urg} foi enviada.")
-                else:
-                    status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+        st.session_state.pedido_tmp = solicitacao_input
+
+    # Verifica se faltam dados obrigatórios para habilitar o botão de envio
+    pode_enviar = bool(solicitante and postando_como and data_valida and st.session_state.pedido_tmp is not None)
+
+    # O botão final fica visível mas desativado enquanto não estiver tudo preenchido
+    btn_enviar = st.button("🚀 Finalizar Solicitação e Enviar", type="primary", use_container_width=True, disabled=not pode_enviar)
+    
+    if btn_enviar:
+        with st.status("🚀 Registrando sua solicitação e subindo anexos...", expanded=True) as status:
+            descricao_final = st.session_state.pedido_tmp.text or ""
+            arquivos = st.session_state.pedido_tmp.files or []
+            audio_gravado = st.session_state.pedido_tmp.audio
+            
+            links_final = []
+            
+            # Processamento de Arquivos Selecionados
+            for f in arquivos:
+                status.write(f"📤 Subindo arquivo: {f.name}...")
+                url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
+                if url_storage:
+                    links_final.append(url_storage)
+            
+            # Processamento de Áudio Gravado
+            if audio_gravado:
+                status.write("🎤 Subindo áudio gravado...")
+                nome_wav = f"rec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+                url_audio = upload_to_storage(audio_gravado.getvalue(), nome_wav, "audio/wav")
+                if url_audio:
+                    links_final.append(url_audio)
+            
+            # Persistência no Firestore
+            dados_solicitacao = {
+                "unidade": unidade,
+                "solicitante": solicitante,
+                "postando_como": postando_como,
+                "tipo": tipo_demanda,
+                "data_publicacao": data_pub, # Agora enviando como objeto datetime (Timestamp no Firestore)
+                "canais": ", ".join(canais),
+                "descricao": descricao_final,
+                "anexos": links_final,
+                "data_solicitacao": datetime.now(), # Agora como datetime.now() local para bater com data_pub
+                "status": "Pendente",
+                "urgencia": urgencia
+            }
+            
+            sucesso, msg_erro = adicionar_documento("solicitacoes", dados_solicitacao)
+            if sucesso:
+                st.session_state.pedido_tmp = None  # Limpa do estado o rascunho temporario
+                status.update(label="✅ Solicitação registrada com sucesso!", state="complete", expanded=False)
+                st.balloons()
+                msg_urg = " (Tratada como URGENTE)" if urgencia else ""
+                nome_exibicao = solicitante.split(" ")[0]
+                st.success(f"💻 Tudo pronto, {nome_exibicao}! Sua demanda{msg_urg} foi enviada.")
+                time.sleep(2.5)
+                st.rerun()
+            else:
+                status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
 
 def page_dashboard_solicitacoes():
     st.header("📊 Dashboard de Solicitações")
@@ -474,9 +509,10 @@ def page_dashboard_solicitacoes():
                 col_info1, col_info2 = st.columns(2)
                 
                 with col_info1:
-                    st.write(f"**📍 Departamento:** {sol.get('unidade')}")
-                    st.write(f"**👤 Solicitante:** {sol.get('solicitante')}")
-                    st.write(f"**🎯 Setor:** {sol.get('ambito')}")
+                    st.write(f"**📍 Unidade / Órgão:** {sol.get('unidade')}")
+                    st.write(f"**👤 Nome Solicitante:** {sol.get('solicitante')}")
+                    if sol.get('postando_como'):
+                        st.write(f"**🎭 Postando como:** {sol.get('postando_como')}")
                 
                 with col_info2:
                     st.write(f"**📅 Publicar em:** `{formatar_br(sol.get('data_publicacao'))}`")
@@ -545,9 +581,9 @@ def page_dashboard_solicitacoes():
                             
                                 DEMANDA DO USUÁRIO:
                                 - TIPO: {sol.get('tipo')}
-                                - SOLICITANTE: {sol.get('solicitante')}
-                                - UNIDADE: {sol.get('unidade')}
-                                - SETOR: {sol.get('ambito')}
+                                - SOLICITANTE/NOME: {sol.get('solicitante')}
+                                - UNIDADE/ÓRGÃO: {sol.get('unidade')}
+                                - POSTANDO COMO: {sol.get('postando_como', 'Não especificado')}
                                 - DESCRIÇÃO: {sol.get('descricao')}
                             
                                 INSTRUÇÃO FINAL: 
@@ -630,9 +666,9 @@ def page_dashboard_solicitacoes():
                             
                                 DEMANDA DO USUÁRIO:
                                 - TIPO: {sol.get('tipo')}
-                                - SOLICITANTE: {sol.get('solicitante')}
-                                - UNIDADE: {sol.get('unidade')}
-                                - SETOR: {sol.get('ambito')}
+                                - SOLICITANTE/NOME: {sol.get('solicitante')}
+                                - UNIDADE/ÓRGÃO: {sol.get('unidade')}
+                                - POSTANDO COMO: {sol.get('postando_como', 'Não especificado')}
                                 - CANAIS ONDE SERÃO PUBLICADOS: {canais_solicitados}
                                 - DESCRIÇÃO: {sol.get('descricao')}
                                 """
@@ -676,7 +712,7 @@ def page_dashboard_solicitacoes():
                                 # Gerar Imagem
                                 image_bytes = None
                                 try:
-                                    ambito_sol = sol.get('ambito', 'Departamento')
+                                    ambito_sol = sol.get('postando_como', 'Departamento')
                                     prefixo_template = "departamento"
                                     if "Colegiado" in ambito_sol: prefixo_template = "colegiado"
                                     elif "Pós" in ambito_sol: prefixo_template = "pos"
@@ -700,8 +736,8 @@ def page_dashboard_solicitacoes():
                                         f"3. SE HOUVER FOTOS de pessoas/rostos nos arquivos fornecidos pelo usuário: O rosto deve permanecer INTACTO. Do NOT alter expressions, DO NOT add smiles or corrections. Copie as feições exatamente como estão na imagem original. Caso a foto seja muito ampla, faça um foco (recorte) no rosto da pessoa destacando-a no centro ou laterais do design.\n\n"
                                         f"DEMANDA DO USUÁRIO (O que exibir na arte):\n"
                                         f"TIPO: '{sol.get('tipo', '')}'\n"
+                                        f"POSTANDO COMO: '{sol.get('postando_como', '')}'\n"
                                         f"DESCRIÇÃO E TEXTOS: '{sol.get('descricao', '')}'\n"
-                                        f"SETOR: {ambito_sol}\n"
                                     )
                                 
                                     with st.spinner("🎨 Renderizando arte visual (aspect ratio 4:5)...", show_time=True):
@@ -762,7 +798,9 @@ def page_dashboard_solicitacoes():
                                 lista_tents.append(nova_tent)
                                 
                                 if atualizar_tentativas_ia(sol['id'], lista_tents):
-                                    status_ia.update(label="✨ Rascunho finalizado e salvo no histórico! Recarregue a página para ver no histórico completo abaixo.", state="complete")
+                                    status_ia.update(label="✨ Rascunho finalizado e salvo no histórico! Atualizando...", state="complete")
+                                    time.sleep(1.5)
+                                    st.rerun()
                                 else:
                                     status_ia.update(label="⚠️ Rascunho gerado, mas erro ao salvar histórico.", state="error")
                                     
@@ -784,10 +822,10 @@ def page_dashboard_solicitacoes():
                         try: lista_tents.append(json.loads(t))
                         except: pass
                 
-                for idx, t in enumerate(lista_tents):
-                    num = idx + 1
-                    # Expande apenas a tentativa mais recente
-                    with st.expander(f"Tentativa {num}", expanded=(idx == len(lista_tents)-1)):
+                for idx, t in enumerate(reversed(lista_tents)):
+                    num = len(lista_tents) - idx
+                    # Expande apenas a tentativa mais recente (que agora é o índice 0)
+                    with st.expander(f"Tentativa {num}", expanded=(idx == 0)):
                         c1, c2 = st.columns([1, 1.2])
                         with c1:
                             if t.get("imagem_url"):
@@ -1027,7 +1065,7 @@ def page_todas_solicitacoes():
         df["data_publicacao"] = pd.to_datetime(df["data_publicacao"], errors='coerce')
     
     # Ordenação lógica das colunas para visualização mais fluida
-    colunas_ordem = ["status", "data_solicitacao", "solicitante", "ambito", "unidade", "email", "tipo", "data_publicacao", "descricao", "canais", "anexos"]
+    colunas_ordem = ["status", "data_solicitacao", "unidade", "postando_como", "solicitante", "email", "tipo", "data_publicacao", "descricao", "canais", "anexos"]
     cols_existentes = [c for c in colunas_ordem if c in df.columns]
     outras_cols = [c for c in df.columns if c not in colunas_ordem]
     df = df[cols_existentes + outras_cols]
@@ -1043,17 +1081,19 @@ def page_todas_solicitacoes():
             "data_solicitacao": st.column_config.DatetimeColumn(
                 "Solicitado Em", 
                 format="DD/MM/YYYY - HH:mm",
-                help="Data e hora exata da requisição"
+                help="Data e hora exata da requisição",
+                width="medium"
             ),
             "data_publicacao": st.column_config.DatetimeColumn(
                 "Para Publicar Em", 
                 format="DD/MM/YYYY - HH:mm",
+                width="medium"
             ),
             "solicitante": st.column_config.TextColumn("Solicitante", width="medium"),
-            "email": st.column_config.TextColumn("E-mail", width="medium"),
-            "unidade": st.column_config.TextColumn("Unidade", width="small"),
+            "email": st.column_config.TextColumn("E-mail", width="large"),
+            "unidade": st.column_config.TextColumn("Unidade", width="medium"),
             "tipo": st.column_config.TextColumn("Tipo", width="small"),
-            "ambito": st.column_config.TextColumn("Setor", width="small"),
+            "postando_como": st.column_config.TextColumn("Papel do Solicitante", width="medium"),
             "status": st.column_config.TextColumn("Status", width="small"),
             "descricao": st.column_config.TextColumn("Descrição da Demanda", width="large"),
             "canais": st.column_config.TextColumn("Canais", width="medium"),
@@ -1061,7 +1101,7 @@ def page_todas_solicitacoes():
                 "🔗 Anexos (Base)",
                 display_text="Abrir Arquivo 📥",
                 help="Link para o arquivo original em nuvem",
-                width="small"
+                width="medium"
             )
         }
     )
@@ -1070,9 +1110,11 @@ def page_todas_solicitacoes():
 # Montagem das Páginas e Menu Lateral
 pg = st.navigation({
     "Central de Solicitações": [
-        st.Page(page_solicitar_publicacao, title="Fazer Pedido", icon="📣", default=True),
-        st.Page(page_dashboard_solicitacoes, title="Dashboard de Pedidos", icon="📊"),
-        st.Page(page_todas_solicitacoes, title="Solicitações Totais", icon="📋"),
+        st.Page(page_solicitar_publicacao, title="Nova Solicitação de Divulgação", icon="📣", default=True),
+        st.Page(page_todas_solicitacoes, title="Todas as Solicitações", icon="📋")
+    ],
+    "Em Construção": [
+        st.Page(page_dashboard_solicitacoes, title="Gerador de Proposta de Conteúdo", icon="📊"),
         st.Page(page_adicionar_noticia, title="Publicar Notícia no site do DEST", icon="📰")
     ]
 })

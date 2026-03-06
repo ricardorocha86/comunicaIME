@@ -68,6 +68,8 @@ function renderArticleBody(value, title = '') {
     }
 
     const normalizedTitle = normalizeText(title);
+    let leadRendered = false;
+
     return blocks
         .filter((block, index) => !(index === 0 && normalizeText(block) === normalizedTitle))
         .map((block) => {
@@ -104,7 +106,9 @@ function renderArticleBody(value, title = '') {
                 return `<blockquote class="article-quote">${formatInlineText(lines[0])}</blockquote>`;
             }
 
-            return `<p>${formatInlineText(lines.join('<br>'))}</p>`;
+            const paragraphClass = leadRendered ? '' : ' class="article-lead"';
+            leadRendered = true;
+            return `<p${paragraphClass}>${formatInlineText(lines.join('<br>'))}</p>`;
         })
         .join('');
 }

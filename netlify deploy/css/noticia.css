@@ -200,6 +200,21 @@
     margin-bottom: 0;
 }
 
+.article-content .article-lead {
+    font-size: 1.14rem;
+    line-height: 1.9;
+    color: #20334b;
+}
+
+.article-content .article-lead::first-letter {
+    float: left;
+    margin: 8px 10px 0 0;
+    font-family: 'Source Serif 4', serif;
+    font-size: 3.4rem;
+    line-height: 0.85;
+    color: var(--accent-dark);
+}
+
 .article-subtitle {
     margin: 34px 0 14px;
     font-family: 'Source Serif 4', serif;
@@ -316,6 +331,10 @@
     .article-content p {
         font-size: 0.98rem;
         line-height: 1.82;
+    }
+
+    .article-content .article-lead {
+        font-size: 1.05rem;
     }
 
     .article-subtitle {
