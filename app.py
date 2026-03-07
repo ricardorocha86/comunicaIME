@@ -267,26 +267,46 @@ def page_solicitar_publicacao():
     
 
 
-    lista_demandas = [
-        "Defesa de Mestrado", "Defesa de Doutorado", "Qualificação (Mestr/Dout)",
-        "Artigo Publicado (A1-B4)", "Prêmio ou Honra Acadêmica", "Edital de Monitoria",
-        "Edital de Bolsas (IC/Extensão)", "Vaga de Estágio ou Emprego", "Seminário / Colóquio",
-        "Workshop / Minicurso", "Palestra de Convidado", "Professor Visitante",
-        "Comunicado Administrativo", "Defesa de TCC (Graduação)", "Inscrições Abertas (Pós)",
-        "Lançamento de Livro", "Evento Social / Integração", "Cotas de Intercâmbio",
-        "Busca de Voluntários (Pesquisa)", "Feriado / Recesso", "Outros"
+    categorias_demanda = [
+        "Ensino (Edital, Monitoria, TCC, Aulas...)",
+        "Pesquisa (Defesas, Publicações, Prêmios...)",
+        "Extensão (Eventos, Cursos, Projetos Abertos...)",
+        "Administrativo / Institucional"
     ]
-    tipo_demanda = st.selectbox("Tipo de Solicitação", lista_demandas)
+    tipo_demanda = st.selectbox("Categoria da Solicitação", categorias_demanda)
     
-    # Validação de Data de Publicação (Mínimo 24h, Urgência < 48h)
-    default_date = (datetime.now() + timedelta(days=7)).replace(minute=0, second=0, microsecond=0)
-    data_pub = st.datetime_input(
-        "Data e Hora pretendida de publicação", 
-        value=default_date,
-        step=timedelta(hours=1),
-        format="DD/MM/YYYY",
-        help="O prazo mínimo é de 24h. Entre 24h e 48h é considerado URGENTE."
-    )
+    col_publico, col_arte = st.columns(2)
+    with col_publico:
+        publico_alvo = st.selectbox(
+            "Público-alvo Principal",
+            ["Comunidade em Geral (Aberto)", "Apenas Alunos (Graduação/Pós)", "Apenas Docentes e Servidores", "Público Externo"]
+        )
+    with col_arte:
+        st.write("") # Espaçamento para alinhar com o selectbox
+        st.write("")
+        arte_pronta = st.checkbox("✅ A arte final já está nos anexos (Criar apenas a legenda)")
+    
+    col_dt1, col_dt2 = st.columns(2)
+    
+    with col_dt1:
+        # Validação de Data de Publicação (Mínimo 24h, Urgência < 48h)
+        default_date = (datetime.now() + timedelta(days=7)).replace(minute=0, second=0, microsecond=0)
+        data_pub = st.datetime_input(
+            "Data pretendida de publicação", 
+            value=default_date,
+            step=timedelta(hours=1),
+            format="DD/MM/YYYY",
+            help="Entre 24h e 48h é considerado URGENTE."
+        )
+
+    with col_dt2:
+         data_evento = st.datetime_input(
+            "Data e Hora do Evento (Opcional)", 
+            value=None,
+            step=timedelta(hours=1),
+            format="DD/MM/YYYY",
+            help="Se for um evento com horário marcado, insira aqui."
+        )
     
     agora = datetime.now()
     diferenca = data_pub - agora
@@ -367,6 +387,9 @@ def page_solicitar_publicacao():
                 "solicitante": solicitante,
                 "postando_como": postando_como,
                 "tipo": tipo_demanda,
+                "publico_alvo": publico_alvo,
+                "arte_pronta": arte_pronta,
+                "data_evento": data_evento, # Pode ser None
                 "data_publicacao": data_pub, # Agora enviando como objeto datetime (Timestamp no Firestore)
                 "canais": ", ".join(canais),
                 "descricao": descricao_final,
