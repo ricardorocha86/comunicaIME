@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-import io
+﻿import io
 import json
 import os
 import re
@@ -136,6 +135,14 @@ def montar_links_markdown(urls: list[str] | None) -> str:
     return "\n".join(f"- [Anexo {idx}]({url})" for idx, url in enumerate(links, start=1))
 
 
+def atualizar_campos_solicitacao(doc_id: str, campos: dict) -> bool:
+    try:
+        return FIREBASE.update_fields("solicitacoes", doc_id, campos)
+    except Exception as e:
+        st.error(f"Falha ao atualizar a solicita\u00e7\u00e3o: {e}")
+        return False
+
+
 def enviar_email_personalizado(
     solicitacao: dict,
     destino_email: str,
@@ -257,6 +264,7 @@ def notificar_retorno_para_producao(solicitacao: dict, parecer: str) -> list[str
 def render_links_markdown(urls: list[str] | None, titulo: str):
     markdown_links = montar_links_markdown(urls)
     if markdown_links == "Sem anexos.":
+        st.caption(f"{titulo}: nenhum anexo.")
         return
     st.markdown(f"**{titulo}**")
     st.markdown(markdown_links)
@@ -454,7 +462,7 @@ def page_solicitar_publicacao():
     data_valida = True
 
     if diferenca < timedelta(hours=24):
-        st.error("⚠️ O prazo mínimo para solicitações é de **24 horas**. Por favor, escolha um horário posterior.")
+        st.error("âš ï¸ O prazo mÃ­nimo para solicitaÃ§Ãµes Ã© de **24 horas**. Por favor, escolha um horÃ¡rio posterior.")
         data_valida = False
     elif diferenca < timedelta(hours=48):
         st.warning("🚨 **Atenção**: Esta solicitação será tratada com **URGÊNCIA** (Prazo menor que 48h).")
@@ -475,7 +483,7 @@ def page_solicitar_publicacao():
         unidade and solicitante and solicitando_como and email_valido and data_valida
     )
     chat_placeholder = (
-        "⚠️ Preencha Unidade, Solicitante, Solicitando como, E-mail válido e Data/Hora válida para liberar o envio."
+        "âš ï¸ Preencha Unidade, Solicitante, Solicitando como, E-mail vÃ¡lido e Data/Hora vÃ¡lida para liberar o envio."
         if not formulario_pronto
         else "Descreva detalhadamente a sua solicitação (fornecendo URLs, horários, locais, objetivos e público-alvo pretendido). Utilize o ícone de anexo lateral para incluir materiais adicionais (arquivos PDF, cartazes, imagens ou áudios). Após o preenchimento, confirme o envio nesta barra para finalizar o registro."
     )
@@ -503,7 +511,7 @@ def page_solicitar_publicacao():
 
         if erros_validacao:
             for erro in erros_validacao:
-                st.error(f"⚠️ {erro}")
+                st.error(f"âš ï¸ {erro}")
             render_persistent_footer()
             return
 
@@ -569,7 +577,7 @@ def page_solicitar_publicacao():
                 time.sleep(2.5)
                 st.rerun()
             else:
-                status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+                status.update(label=f"âŒ Erro ao salvar no banco de dados: {msg_erro}", state="error")
     render_persistent_footer()
 
 
@@ -703,14 +711,14 @@ def page_solicitar_apoio_eventos_transmissoes():
     periodo_valido = True
     urgencia = False
     if periodo_inicio < agora + timedelta(hours=24):
-        st.error("⚠️ O prazo mínimo para solicitações é de 24 horas de antecedência para o início.")
+        st.error("âš ï¸ O prazo mÃ­nimo para solicitaÃ§Ãµes Ã© de 24 horas de antecedÃªncia para o inÃ­cio.")
         periodo_valido = False
     elif periodo_inicio < agora + timedelta(hours=48):
         st.warning("🚨 Atenção: esta solicitação será tratada com URGÊNCIA (início em menos de 48h).")
         urgencia = True
 
     if periodo_fim <= periodo_inicio:
-        st.error("⚠️ O fim do período deve ser posterior ao início.")
+        st.error("âš ï¸ O fim do perÃ­odo deve ser posterior ao inÃ­cio.")
         periodo_valido = False
 
     opcoes_apoio = [
@@ -759,7 +767,7 @@ def page_solicitar_apoio_eventos_transmissoes():
     )
 
     chat_placeholder = (
-        "⚠️ Preencha Unidade, Local do evento, Solicitante, Solicitando como, Tipo de Evento, E-mail válido e Período válido para liberar o envio."
+        "âš ï¸ Preencha Unidade, Local do evento, Solicitante, Solicitando como, Tipo de Evento, E-mail vÃ¡lido e PerÃ­odo vÃ¡lido para liberar o envio."
         if not formulario_pronto
         else "Descreva detalhadamente a solicitação (objetivo, local/plataforma, público estimado, necessidades técnicas, links e responsáveis). Utilize o ícone de anexo lateral para incluir materiais."
     )
@@ -836,7 +844,268 @@ def page_solicitar_apoio_eventos_transmissoes():
                 time.sleep(2.5)
                 st.rerun()
             else:
-                status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+                status.update(label=f"âŒ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+
+    render_persistent_footer()
+
+
+def page_gestao_producao_nex():
+    render_header_banner()
+    st.header("Gestao de Producao NEX")
+    st.caption("Assuma ou delegue demandas e inicie a etapa de producao das artes.")
+
+    solicitacoes = listar_documentos("solicitacoes")
+    demandas_ativas = [
+        sol for sol in solicitacoes if status_eh_pendente(sol.get("status")) or status_eh_em_producao(sol.get("status"))
+    ]
+
+    if not demandas_ativas:
+        st.info("Nao ha demandas pendentes ou em producao no momento.")
+        render_persistent_footer()
+        return
+
+    demandas_ativas.sort(key=lambda item: str(item.get("data_publicacao", "")))
+    map_demanda = {montar_rotulo_solicitacao(sol): sol for sol in demandas_ativas}
+    demanda_sel = st.selectbox("Selecione a demanda", list(map_demanda.keys()))
+    sol = map_demanda[demanda_sel]
+
+    st.markdown("### Resumo da demanda")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Solicitante:** {sol.get('solicitante', '-')}")
+        st.write(f"**E-mail:** {sol.get('email', '-')}")
+        st.write(f"**Tipo:** {sol.get('tipo', '-')}")
+    with col2:
+        st.write(f"**Status atual:** {sol.get('status', STATUS_PENDENTE)}")
+        st.write(f"**Data para publicar:** {formatar_data_para_email(sol.get('data_publicacao'))}")
+        st.write(f"**Responsavel NEX atual:** {sol.get('responsavel_nex', RESPONSAVEL_NEX_NAO_DEFINIDO)}")
+
+    st.caption("Descricao da demanda")
+    st.info(sol.get("descricao") or "Sem descricao.")
+
+    opcoes_responsavel = [RESPONSAVEL_NEX_NAO_DEFINIDO] + RESPONSAVEIS_NEX_OPCOES
+    responsavel_atual = sol.get("responsavel_nex", RESPONSAVEL_NEX_NAO_DEFINIDO)
+    if responsavel_atual not in opcoes_responsavel:
+        opcoes_responsavel.append(responsavel_atual)
+
+    responsavel_novo = st.selectbox(
+        "Responsavel NEX",
+        opcoes_responsavel,
+        index=opcoes_responsavel.index(responsavel_atual),
+        key=f"responsavel_nex_{sol.get('id', 'sem_id')}",
+    )
+
+    if st.button("Iniciar producao das artes", type="primary", use_container_width=True, key=f"iniciar_prod_{sol.get('id', 'sem_id')}"):
+        if not sol.get("id"):
+            st.error("Solicitacao sem ID. Nao foi possivel atualizar.")
+            render_persistent_footer()
+            return
+        if responsavel_novo == RESPONSAVEL_NEX_NAO_DEFINIDO:
+            st.error("Selecione um responsavel NEX antes de iniciar a producao.")
+            render_persistent_footer()
+            return
+
+        campos = {
+            "responsavel_nex": responsavel_novo,
+            "status": STATUS_EM_PRODUCAO_ARTES,
+            "data_inicio_producao": datetime.now(),
+        }
+        atualizado = atualizar_campos_solicitacao(sol["id"], campos)
+        if atualizado:
+            sol_atualizada = {**sol, **campos}
+            erros_email = notificar_inicio_producao(sol_atualizada, responsavel_novo)
+            st.success("Demanda movida para producao das artes.")
+            if erros_email:
+                for erro in erros_email:
+                    st.warning(erro)
+            time.sleep(1.2)
+            st.rerun()
+        else:
+            st.error("Nao foi possivel atualizar a demanda.")
+
+    render_persistent_footer()
+
+
+def page_responder_demanda():
+    render_header_banner()
+    st.header("Responder Demanda")
+    st.caption("Finalize o material de uma demanda em producao e envie para aprovacao final.")
+
+    solicitacoes = listar_documentos("solicitacoes")
+    em_producao = [sol for sol in solicitacoes if status_eh_em_producao(sol.get("status"))]
+
+    if not em_producao:
+        st.info("Nao ha demandas em producao no momento.")
+        render_persistent_footer()
+        return
+
+    em_producao.sort(key=lambda item: str(item.get("data_publicacao", "")))
+    map_demanda = {montar_rotulo_solicitacao(sol): sol for sol in em_producao}
+    demanda_sel = st.selectbox("Projeto em producao", list(map_demanda.keys()))
+    sol = map_demanda[demanda_sel]
+
+    st.write(f"**Responsavel NEX:** {sol.get('responsavel_nex', RESPONSAVEL_NEX_NAO_DEFINIDO)}")
+    st.write(f"**Solicitante:** {sol.get('solicitante', '-')}")
+    st.write(f"**E-mail solicitante:** {sol.get('email', '-')}")
+
+    resposta_texto = st.text_area(
+        "Texto de resposta da demanda",
+        value=sol.get("resposta_nex_texto", ""),
+        height=220,
+        key=f"resposta_texto_{sol.get('id', 'sem_id')}",
+    )
+    arquivos_resposta = st.file_uploader(
+        "Anexar arquivos de resposta",
+        accept_multiple_files=True,
+        key=f"resposta_arquivos_{sol.get('id', 'sem_id')}",
+    )
+
+    render_links_markdown(sol.get("resposta_nex_anexos", []), "Anexos de resposta ja salvos")
+
+    if st.button("Enviar resposta e marcar como concluido", type="primary", use_container_width=True, key=f"enviar_resposta_{sol.get('id', 'sem_id')}"):
+        if not sol.get("id"):
+            st.error("Solicitacao sem ID. Nao foi possivel atualizar.")
+            render_persistent_footer()
+            return
+
+        texto_final = (resposta_texto or "").strip()
+        links_resposta = [u for u in (sol.get("resposta_nex_anexos") or []) if isinstance(u, str) and u.strip()]
+        arquivos_novos = arquivos_resposta or []
+        if not texto_final and not links_resposta and not arquivos_novos:
+            st.error("Informe um texto ou anexe arquivos para responder a demanda.")
+            render_persistent_footer()
+            return
+
+        with st.status("Salvando resposta da demanda...", expanded=True) as status:
+            for arquivo in arquivos_novos:
+                status.write(f"Enviando anexo: {arquivo.name}")
+                url = upload_to_storage(arquivo.getvalue(), arquivo.name, arquivo.type)
+                if url:
+                    links_resposta.append(url)
+
+            campos = {
+                "resposta_nex_texto": texto_final,
+                "resposta_nex_anexos": links_resposta,
+                "status": STATUS_CONCLUIDO,
+                "data_resposta_nex": datetime.now(),
+            }
+            atualizado = atualizar_campos_solicitacao(sol["id"], campos)
+            if atualizado:
+                sol_atualizada = {**sol, **campos}
+                erros_email = notificar_conclusao_para_coordenador(sol_atualizada, texto_final, links_resposta)
+                status.update(label="Resposta registrada e status atualizado para concluido.", state="complete", expanded=False)
+                if erros_email:
+                    for erro in erros_email:
+                        st.warning(erro)
+                time.sleep(1.2)
+                st.rerun()
+            else:
+                status.update(label="Falha ao atualizar a demanda.", state="error", expanded=False)
+
+    render_persistent_footer()
+
+
+def page_aprovacao_final_demanda():
+    render_header_banner()
+    st.header("Aprovacao Final da Demanda")
+    st.caption("Valide o material concluido antes do envio final ao solicitante.")
+
+    solicitacoes = listar_documentos("solicitacoes")
+    aguardando_aprovacao = [sol for sol in solicitacoes if status_eh_concluido(sol.get("status"))]
+
+    if not aguardando_aprovacao:
+        st.info("Nao ha demandas concluidas aguardando aprovacao final.")
+        render_persistent_footer()
+        return
+
+    aguardando_aprovacao.sort(key=lambda item: str(item.get("data_resposta_nex", "")))
+    map_demanda = {montar_rotulo_solicitacao(sol): sol for sol in aguardando_aprovacao}
+    demanda_sel = st.selectbox("Demanda concluida", list(map_demanda.keys()))
+    sol = map_demanda[demanda_sel]
+
+    st.write(f"**Solicitante:** {sol.get('solicitante', '-')}")
+    st.write(f"**E-mail solicitante:** {sol.get('email', '-')}")
+    st.write(f"**Responsavel NEX:** {sol.get('responsavel_nex', RESPONSAVEL_NEX_NAO_DEFINIDO)}")
+    st.write(f"**Status atual:** {sol.get('status', '-')}")
+
+    resposta_texto = (sol.get("resposta_nex_texto") or "").strip()
+    st.markdown("### Conteudo proposto")
+    st.info(resposta_texto if resposta_texto else "Sem texto de resposta.")
+    render_links_markdown(sol.get("resposta_nex_anexos", []), "Anexos da resposta")
+
+    parecer = st.text_area(
+        "Parecer do coordenador",
+        placeholder="Observacoes para aprovacao final ou para retorno da demanda.",
+        key=f"parecer_coord_{sol.get('id', 'sem_id')}",
+    )
+
+    col_aprovar, col_reprovar = st.columns(2)
+    with col_aprovar:
+        aprovar = st.button(
+            "Aprovar e enviar ao solicitante",
+            type="primary",
+            use_container_width=True,
+            key=f"aprovar_{sol.get('id', 'sem_id')}",
+        )
+    with col_reprovar:
+        reprovar = st.button(
+            "Nao aprovar (voltar para producao)",
+            use_container_width=True,
+            key=f"reprovar_{sol.get('id', 'sem_id')}",
+        )
+
+    if aprovar:
+        if not sol.get("id"):
+            st.error("Solicitacao sem ID. Nao foi possivel atualizar.")
+            render_persistent_footer()
+            return
+        campos = {
+            "status": STATUS_APROVADO_ENVIADO,
+            "aprovado_final": True,
+            "parecer_coordenador": (parecer or "").strip(),
+            "data_aprovacao_final": datetime.now(),
+        }
+        atualizado = atualizar_campos_solicitacao(sol["id"], campos)
+        if atualizado:
+            sol_atualizada = {**sol, **campos}
+            erros_email = notificar_aprovacao_final_para_solicitante(
+                sol_atualizada,
+                resposta_texto,
+                sol.get("resposta_nex_anexos", []),
+                parecer,
+            )
+            st.success("Aprovacao final registrada e e-mail enviado ao solicitante.")
+            if erros_email:
+                for erro in erros_email:
+                    st.warning(erro)
+            time.sleep(1.2)
+            st.rerun()
+        else:
+            st.error("Nao foi possivel atualizar a demanda.")
+
+    if reprovar:
+        if not sol.get("id"):
+            st.error("Solicitacao sem ID. Nao foi possivel atualizar.")
+            render_persistent_footer()
+            return
+        campos = {
+            "status": STATUS_EM_PRODUCAO_ARTES,
+            "aprovado_final": False,
+            "parecer_coordenador": (parecer or "").strip(),
+            "data_retorno_producao": datetime.now(),
+        }
+        atualizado = atualizar_campos_solicitacao(sol["id"], campos)
+        if atualizado:
+            sol_atualizada = {**sol, **campos}
+            erros_email = notificar_retorno_para_producao(sol_atualizada, parecer)
+            st.warning("Demanda retornou para producao das artes.")
+            if erros_email:
+                for erro in erros_email:
+                    st.warning(erro)
+            time.sleep(1.2)
+            st.rerun()
+        else:
+            st.error("Nao foi possivel atualizar a demanda.")
 
     render_persistent_footer()
 
@@ -901,7 +1170,7 @@ def page_dashboard_solicitacoes():
                 urgente = sol.get("urgencia", False)
                 header_prefix = "🚨 " if urgente and status_eh_pendente(status) else ""
                 if status_eh_pendente(status):
-                    status_icon = "⏳"
+                    status_icon = "â³"
                 elif status_eh_em_producao(status):
                     status_icon = "🎨"
                 elif (
@@ -911,7 +1180,7 @@ def page_dashboard_solicitacoes():
                 ):
                     status_icon = "✅"
                 else:
-                    status_icon = "❌"
+                    status_icon = "âŒ"
                 
                 tipo = sol.get('tipo', 'Solicitação').upper()
                 nome = sol.get('solicitante', '')
@@ -931,12 +1200,12 @@ def page_dashboard_solicitacoes():
                 status = sol.get("status", STATUS_PENDENTE)
                 
                 # Parte Superior: Duas Colunas para dados rápidos
-                st.subheader(selecionado.replace("⏳ ", "").replace("🚨 ", "").replace("✅ ", "").replace("❌ ", ""))
+                st.subheader(selecionado.replace("â³ ", "").replace("ðŸš¨ ", "").replace("âœ… ", "").replace("âŒ ", ""))
                 
                 col_info1, col_info2 = st.columns(2)
                 
                 with col_info1:
-                    st.write(f"**📍 Unidade / Órgão:** {sol.get('unidade')}")
+                    st.write(f"**ðŸ“ Unidade / Ã“rgÃ£o:** {sol.get('unidade')}")
                     st.write(f"**👤 Nome Solicitante:** {sol.get('solicitante')}")
                     if sol.get("solicitando_como"):
                         st.write(f"**🎭 Solicitando como:** {sol.get('solicitando_como')}")
@@ -950,7 +1219,7 @@ def page_dashboard_solicitacoes():
                 st.divider()
                 
                 # Parte Inferior: Uma Coluna para conteúdo denso
-                with st.expander("📝 Descrição Detalhada"):
+                with st.expander("ðŸ“ DescriÃ§Ã£o Detalhada"):
                     st.info(sol.get("descricao") or "Sem descrição fornecida.")
             
                 # Exibição Inteligente em Grid de 4 Colunas
@@ -972,9 +1241,9 @@ def page_dashboard_solicitacoes():
                                     # --- IMAGENS ---
                                     if any(ext in l_lower for ext in [".png", ".jpg", ".jpeg", ".webp"]) or ("alt=media" in l_lower and not any(a in l_lower for a in [".wav", ".mp3", ".pdf"])):
                                         st.image(link, use_container_width=True)
-                                        st.markdown(f"🖼️ [**{nome_arq}**]({link})")
+                                        st.markdown(f"ðŸ–¼ï¸ [**{nome_arq}**]({link})")
                                 
-                                    # --- ÁUDIOS ---
+                                    # --- ÃUDIOS ---
                                     elif any(ext in l_lower for ext in [".wav", ".mp3", ".ogg"]):
                                         st.audio(link)
                                         st.markdown(f"🎵 [**{nome_arq}**]({link})")
@@ -995,7 +1264,7 @@ def page_dashboard_solicitacoes():
                 if st.button("Fazer Proposta de Conteúdo", key=f"ia_{sol['id']}", use_container_width=True, type="primary"):
                     if GEMINI_API_KEY_SECRET:
                         client = genai.Client(api_key=GEMINI_API_KEY_SECRET)
-                        with st.status("⚙️ Estruturando Materiais da Solicitação...", expanded=True) as status_ia:
+                        with st.status("âš™ï¸ Estruturando Materiais da SolicitaÃ§Ã£o...", expanded=True) as status_ia:
                             try:
                                 tempo_inicio = time.time()
                                 # 1. Preparar Conteúdo Multimodal
@@ -1007,7 +1276,7 @@ def page_dashboard_solicitacoes():
                                 {INSTRUCAO_IDENTIDADE_TEXTO}
                                 {INSTRUCAO_IDENTIDADE_VISUAL}
                             
-                                DEMANDA DO USUÁRIO:
+                                DEMANDA DO USUÃRIO:
                                 - TIPO: {sol.get('tipo')}
                                 - SOLICITANTE/NOME: {sol.get('solicitante')}
                                 - UNIDADE/ÓRGÃO: {sol.get('unidade')}
@@ -1033,7 +1302,7 @@ def page_dashboard_solicitacoes():
                                 for link in anexos_solicitacao:
                                     l_low = str(link).lower()
                                     nome_arq = extrair_nome_arquivo(link)
-                                    st.write(f"🔍 Preparando: **{nome_arq}**...")
+                                    st.write(f"ðŸ” Preparando: **{nome_arq}**...")
                                 
                                     # Determina MIME type oficial para upload via API Files
                                     m_type = None
@@ -1046,7 +1315,7 @@ def page_dashboard_solicitacoes():
                                     elif ".ogg" in l_low: m_type = "audio/ogg"
                                 
                                     try:
-                                        # Download e uso da API de Arquivos do Gemini (Protege contra limitação de Payload/Erro de Áudio)
+                                        # Download e uso da API de Arquivos do Gemini (Protege contra limitaÃ§Ã£o de Payload/Erro de Ãudio)
                                         resp_file = HTTP.get(link)
                                         if resp_file.status_code == 200:
                                             ext = os.path.splitext(nome_arq)[1].lower()
@@ -1056,7 +1325,7 @@ def page_dashboard_solicitacoes():
                                                 tmp_file.write(resp_file.content)
                                                 tmp_path = tmp_file.name
                                             
-                                            st.write(f"☁️ Fazendo upload nativo (File API)...")
+                                            st.write(f"â˜ï¸ Fazendo upload nativo (File API)...")
                                             gemini_file = client.files.upload(file=tmp_path)
                                             anexos_parts.append(gemini_file)
                                         
@@ -1068,9 +1337,9 @@ def page_dashboard_solicitacoes():
                                             
                                             st.write(f"✅ Anexo processado e indexado com sucesso.")
                                         else:
-                                            st.warning(f"⚠️ Não foi possível baixar '{nome_arq}' (Status {resp_file.status_code})")
+                                            st.warning(f"âš ï¸ NÃ£o foi possÃ­vel baixar '{nome_arq}' (Status {resp_file.status_code})")
                                     except Exception as e_dl:
-                                        st.warning(f"⚠️ Erro ao tratar '{nome_arq}': {e_dl}")
+                                        st.warning(f"âš ï¸ Erro ao tratar '{nome_arq}': {e_dl}")
                             
                                 # 2. Gerar Texto Estruturado Multicanal
                                 class TextosGerados(BaseModel):
@@ -1086,21 +1355,21 @@ def page_dashboard_solicitacoes():
                             
                                 IMPORTANTE: O usuário quer publicar este conteúdo nos seguintes canais: {canais_solicitados}.
                                 
-                                REGRAS DE FORMATAÇÃO ESTRUTURAIS EXPLÍCITAS:
+                                REGRAS DE FORMATAÃ‡ÃƒO ESTRUTURAIS EXPLÃCITAS:
                                 - **QUEBRAS DE LINHA**: É OBRIGATÓRIO o uso sequenciado de duas quebras de linha literais (\\n\\n) em todos os textos para gerar espaçamento/parágrafos de descanso visual, nada de textão sólido.
                                 - **ESCALA DE TAMANHOS**: Garanta que o texto para SITE seja nitidamente o mais longo, rico e informativo, com cara de artigo, enquanto WAHTSAPP seja objetivo e sintético com foco em direcionamento para ler a notícia inteira no Site. O E-mail também deve ser médio-longo para comunicar formalmente.
-                                - **USO RESTRITO DE EMOJIS**: Limite estritamente a NO MÁXIMO 3 emojis por texto (para canais como Instagram e WhatsApp). Canais formais como E-mail, Site e LinkedIn NÃO DEVEM possuir nenhum emoji!
+                                - **USO RESTRITO DE EMOJIS**: Limite estritamente a NO MÃXIMO 3 emojis por texto (para canais como Instagram e WhatsApp). Canais formais como E-mail, Site e LinkedIn NÃƒO DEVEM possuir nenhum emoji!
                             
-                                DEMANDA DO USUÁRIO:
+                                DEMANDA DO USUÃRIO:
                                 - TIPO: {sol.get('tipo')}
                                 - SOLICITANTE/NOME: {sol.get('solicitante')}
                                 - UNIDADE/ÓRGÃO: {sol.get('unidade')}
                                 - SOLICITANDO COMO: {sol.get('solicitando_como', 'Não especificado')}
-                                - CANAIS ONDE SERÃO PUBLICADOS: {canais_solicitados}
+                                - CANAIS ONDE SERÃƒO PUBLICADOS: {canais_solicitados}
                                 - DESCRIÇÃO: {sol.get('descricao')}
                                 """
                             
-                                with st.spinner("✍️ Compilando e redigindo formato multicanal...", show_time=True):
+                                with st.spinner("âœï¸ Compilando e redigindo formato multicanal...", show_time=True):
                                     resp_text = client.models.generate_content(
                                         model="gemini-3.1-flash-lite-preview", 
                                         contents=anexos_parts + [prompt_texto],
@@ -1123,9 +1392,9 @@ def page_dashboard_solicitacoes():
                                     mapping = [
                                         ("instagram", "📱 Instagram"),
                                         ("whatsapp", "💬 WhatsApp"),
-                                        ("email", "✉️ E-mail"),
+                                        ("email", "âœ‰ï¸ E-mail"),
                                         ("linkedin", "💼 LinkedIn"),
-                                        ("site", "🌐 Site")
+                                        ("site", "ðŸŒ Site")
                                     ]
                                     available_channels = [k for k, _ in mapping if textos_parsed.get(k)]
                                     labels = [l for k, l in mapping if textos_parsed.get(k)]
@@ -1161,7 +1430,7 @@ def page_dashboard_solicitacoes():
                                         f"1. VOCÊ TEM TOTAL LIBERDADE PARA CRIAR! O design deve ser moderno, chamativo, engajador e muito bonito visualmente.\n"
                                         f"2. Foi fornecido um 'background-template' apenas como base de cores e texturas. Use a essência desse fundo, mas sinta-se à vontade para inovar, compor elementos em 3D, adicionar grafismos e criar contrastes marcantes no post.\n"
                                         f"3. SE HOUVER FOTOS de pessoas/rostos nos arquivos fornecidos pelo usuário: O rosto deve permanecer INTACTO. Do NOT alter expressions, DO NOT add smiles or corrections. Copie as feições exatamente como estão na imagem original. Caso a foto seja muito ampla, faça um foco (recorte) no rosto da pessoa destacando-a no centro ou laterais do design.\n\n"
-                                        f"DEMANDA DO USUÁRIO (O que exibir na arte):\n"
+                                        f"DEMANDA DO USUÃRIO (O que exibir na arte):\n"
                                         f"TIPO: '{sol.get('tipo', '')}'\n"
                                         f"SOLICITANDO COMO: '{sol.get('solicitando_como', '')}'\n"
                                         f"DESCRIÇÃO E TEXTOS: '{sol.get('descricao', '')}'\n"
@@ -1190,14 +1459,14 @@ def page_dashboard_solicitacoes():
                                         st.write("✅ Arte visual concluída.")
                                         st.image(image_bytes, caption="Prévia da Arte Gerada", width=300)
                                     else: 
-                                        st.write("ℹ️ Apenas os textos da proposta puderam ser renderizados.")
+                                        st.write("â„¹ï¸ Apenas os textos da proposta puderam ser renderizados.")
                                 except Exception as e_img:
                                     st.warning(f"Não foi possível gerar a arte visual: {e_img}")
                                     
                                 # 3. Salvar resultados permanentemente no Banco de Dados
                                 image_url = None
                                 if image_bytes:
-                                    st.write("☁️ Salvando arte no banco de dados...")
+                                    st.write("â˜ï¸ Salvando arte no banco de dados...")
                                     nome_img = f"ia_gen_{sol['id']}_{int(time.time())}.png"
                                     image_url = upload_to_storage(image_bytes, nome_img, "image/png")
                             
@@ -1229,11 +1498,11 @@ def page_dashboard_solicitacoes():
                                     time.sleep(1.5)
                                     st.rerun()
                                 else:
-                                    status_ia.update(label="⚠️ Rascunho gerado, mas erro ao salvar histórico.", state="error")
+                                    status_ia.update(label="âš ï¸ Rascunho gerado, mas erro ao salvar histÃ³rico.", state="error")
                                     
                             except Exception as e:
                                 st.error(f"Erro inesperado no processamento de IA: {e}")
-                                status_ia.update(label="❌ Erro no processamento", state="error")
+                                status_ia.update(label="âŒ Erro no processamento", state="error")
 
             # Exibição do Histórico de Tentativas da IA
             tentativas_ia_banco = sol.get("tentativas_ia", [])
@@ -1269,9 +1538,9 @@ def page_dashboard_solicitacoes():
                                     mapping = [
                                         ("instagram", "📱 Instagram"),
                                         ("whatsapp", "💬 WhatsApp"),
-                                        ("email", "✉️ E-mail"),
-                                        ("linkedin", "\U0001F4BC LinkedIn"),
-                                        ("site", "🌐 Site")
+                                        ("email", "âœ‰ï¸ E-mail"),
+                                        ("linkedin", "ï¿½ LinkedIn"),
+                                        ("site", "ðŸŒ Site")
                                     ]
                                     available_channels = [k for k, _ in mapping if textos_hist.get(k)]
                                     labels = [l for k, l in mapping if textos_hist.get(k)]
@@ -1283,7 +1552,7 @@ def page_dashboard_solicitacoes():
                                                 st.text_area("Cópia", value=textos_hist[key], height=250, key=f"hs_{key}_{sol['id']}_{num}", label_visibility="collapsed")
                                                 if key == "site":
                                                     st.markdown("---")
-                                                    if st.button("🌐 Adicionar ao site", key=f"btn_add_site_{sol['id']}_{num}"):
+                                                    if st.button("ðŸŒ Adicionar ao site", key=f"btn_add_site_{sol['id']}_{num}"):
                                                         linhas = textos_hist[key].strip().split('\n')
                                                         titulo = next((l for l in linhas if l.strip()), "Notícia do Departamento")
                                                         titulo = titulo.replace('*', '').replace('#', '').strip()
@@ -1302,7 +1571,7 @@ def page_dashboard_solicitacoes():
                                                         if sucesso:
                                                             st.success("✅ Notícia publicada no site com sucesso!")
                                                         else:
-                                                            st.error(f"⚠️ Erro ao publicar: {msg}")
+                                                            st.error(f"âš ï¸ Erro ao publicar: {msg}")
                                 else:
                                     raise ValueError("Not a dict")
                             except:
@@ -1338,7 +1607,7 @@ def page_adicionar_noticia():
             
             # Se tiver imagem, sobe pro Firebase via File API/Storage
             if capa is not None:
-                with st.spinner("☁️ Fazendo upload da Imagem de Capa..."):
+                with st.spinner("â˜ï¸ Fazendo upload da Imagem de Capa..."):
                     img_bytes = capa.read()
                     import time
                     ext = capa.name.split('.')[-1]
@@ -1378,13 +1647,8 @@ def page_gerenciar_instrucoes():
 
 
 
-def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
-    if tipo_pagina == "criativos":
-        st.header("Central de Controle NEX - Solicitações de Criativos")
-    elif tipo_pagina == "apoio":
-        st.header("Central de Controle NEX - Solicitações de Apoio Técnico")
-    else:
-        st.header("Central de Controle NEX - Demandas de Criação de Conteúdos")
+def page_todas_solicitacoes():
+    st.header("Central de Controle NEX - Demandas de Criação de Conteúdos")
 
     st.markdown(
         """
@@ -1394,16 +1658,6 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
             padding-left: 1.25rem !important;
             padding-right: 1.25rem !important;
         }
-        .status-card {
-            border-radius: 10px;
-            padding: 0.55rem 0.8rem;
-            margin: 0.65rem 0 0.35rem 0;
-            border: 1px solid #e5e7eb;
-        }
-        .status-card strong {
-            font-size: 0.98rem;
-            letter-spacing: 0.1px;
-        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1411,152 +1665,55 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
 
     import pandas as pd
 
-    STATUS_UI = {
-        normalizar_status(STATUS_PENDENTE): {
-            "label": "Pendente",
-            "icon": "🟡",
-            "color": "#b45309",
-            "bg": "#fff7ed",
-        },
-        normalizar_status(STATUS_EM_PRODUCAO_ARTES): {
-            "label": "Em andamento",
-            "icon": "🔵",
-            "color": "#1d4ed8",
-            "bg": "#eff6ff",
-        },
-        normalizar_status(STATUS_CONCLUIDO): {
-            "label": "Para conferir",
-            "icon": "🟣",
-            "color": "#7e22ce",
-            "bg": "#faf5ff",
-        },
-        normalizar_status(STATUS_APROVADO_ENVIADO): {
-            "label": "Finalizado",
-            "icon": "🟢",
-            "color": "#166534",
-            "bg": "#f0fdf4",
-        },
-    }
-
-    def normalizar_links_anexo(valor):
-        if isinstance(valor, list):
-            return [u.strip() for u in valor if isinstance(u, str) and u.strip().startswith("http")]
-        if isinstance(valor, str) and valor.strip().startswith("http"):
-            return [valor.strip()]
-        return []
-
-    def preparar_coluna_data(df_local, coluna):
-        if coluna not in df_local.columns:
-            return
-        serie = pd.to_datetime(df_local[coluna], errors="coerce")
-        try:
-            if getattr(serie.dt, "tz", None) is not None:
-                serie = serie.dt.tz_convert(None)
-        except Exception:
-            pass
-        df_local[coluna] = serie
-
-    def valor_texto(v):
-        if v is None:
-            return ""
-        try:
-            if pd.isna(v):
-                return ""
-        except Exception:
-            pass
-        return str(v).strip()
-
-    def formatar_data_exibicao(v):
-        if isinstance(v, pd.Timestamp):
-            if pd.isna(v):
-                return "-"
-            return v.strftime("%d/%m/%Y - %H:%M")
-        if isinstance(v, datetime):
-            return v.strftime("%d/%m/%Y - %H:%M")
-        txt = valor_texto(v)
-        if not txt:
-            return "-"
-        dt = pd.to_datetime(txt, errors="coerce")
-        if pd.isna(dt):
-            return txt
-        return dt.strftime("%d/%m/%Y - %H:%M")
-
-    def resumo_anexos(urls):
-        links = normalizar_links_anexo(urls)
-        if not links:
-            return "Sem anexos"
-        return f"{len(links)} anexo(s)"
-
-    def status_visual(status):
-        meta = STATUS_UI.get(normalizar_status(status))
-        if not meta:
-            return f"⚪ {valor_texto(status) or 'Nao definido'}"
-        return f"{meta['icon']} {meta['label']}"
-
-    def badge_status_html(status):
-        meta = STATUS_UI.get(normalizar_status(status))
-        if not meta:
-            return "<span style='padding:4px 8px;border-radius:999px;background:#f3f4f6;color:#374151;font-weight:600'>⚪ Nao definido</span>"
-        return (
-            "<span style='padding:4px 8px;border-radius:999px;"
-            f"background:{meta['bg']};color:{meta['color']};font-weight:700'>"
-            f"{meta['icon']} {meta['label']}</span>"
-        )
-
-    def section_header(titulo, status_ref, qtd):
-        meta = STATUS_UI.get(normalizar_status(status_ref))
-        if not meta:
-            meta = {"icon": "⚪", "color": "#374151", "bg": "#f3f4f6"}
-        st.markdown(
-            (
-                f"<div class='status-card' style='background:{meta['bg']}; border-left:6px solid {meta['color']}'>"
-                f"<strong style='color:{meta['color']}'>{meta['icon']} {titulo}</strong>"
-                f"<span style='margin-left:8px;color:#111827'>({qtd})</span>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-
-    def build_collection_data(collection_name, colunas_detalhe, date_cols):
+    def render_collection_table(collection_name, section_title, colunas_ordem, rename_map, date_cols, table_prefix):
+        st.subheader(section_title)
         dados = listar_documentos(collection_name)
         if not dados:
-            return None, None
+            st.info("Nenhuma solicitação encontrada nesta categoria.")
+            return
+
+        def normalizar_links_anexo(valor):
+            if isinstance(valor, list):
+                return [u.strip() for u in valor if isinstance(u, str) and u.strip().startswith("http")]
+            if isinstance(valor, str) and valor.strip().startswith("http"):
+                return [valor.strip()]
+            return []
+
+        def preparar_coluna_data(df_local, coluna):
+            if coluna not in df_local.columns:
+                return
+            serie = pd.to_datetime(df_local[coluna], errors="coerce")
+            try:
+                if getattr(serie.dt, "tz", None) is not None:
+                    serie = serie.dt.tz_convert(None)
+            except Exception:
+                pass
+            df_local[coluna] = serie
 
         dados_formatados = []
-        map_por_id = {}
         for sol in dados:
-            doc_id = valor_texto(sol.get("id"))
-            if not doc_id:
-                continue
-
             linha = sol.copy()
-            linha["_doc_id"] = doc_id
             linha.pop("tentativas_ia", None)
             linha["anexos"] = normalizar_links_anexo(linha.get("anexos"))
 
-            if "responsavel_nex" in colunas_detalhe and not valor_texto(linha.get("responsavel_nex")):
-                linha["responsavel_nex"] = RESPONSAVEL_NEX_NAO_DEFINIDO
-
             if isinstance(linha.get("apoios_necessarios"), list):
-                linha["apoios_necessarios"] = ", ".join(linha["apoios_necessarios"]) if linha["apoios_necessarios"] else "Nao informado"
+                linha["apoios_necessarios"] = ", ".join(linha["apoios_necessarios"]) if linha["apoios_necessarios"] else "Não informado"
+
             if "canais" in linha:
                 linha["canais"] = channels_label(linha.get("canais"))
-
-            linha["_status_norm"] = normalizar_status(linha.get("status") or STATUS_PENDENTE)
-            linha["_status_visual"] = status_visual(linha.get("status"))
-            linha["_anexos_markdown"] = montar_links_markdown(linha.get("anexos"))
-            linha["_anexos_resumo"] = resumo_anexos(linha.get("anexos"))
-
             dados_formatados.append(linha)
-            map_por_id[doc_id] = sol
-
-        if not dados_formatados:
-            return None, None
 
         df = pd.DataFrame(dados_formatados)
-        for c in colunas_detalhe:
-            if c not in df.columns:
-                df[c] = None
+        if df.empty:
+            st.info("Nenhuma solicitação encontrada nesta categoria.")
+            return
+
+        cols_existentes = [c for c in colunas_ordem if c in df.columns]
+        if not cols_existentes:
+            st.info("Não há colunas para exibição nesta categoria.")
+            return
+
+        df = df[cols_existentes].copy()
 
         for c in date_cols:
             preparar_coluna_data(df, c)
@@ -1566,895 +1723,249 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                 df = df.sort_values(by=coluna_ordem, ascending=False, na_position="last").reset_index(drop=True)
                 break
 
-        return df, map_por_id
+        colunas_visiveis = []
+        colunas_link_anexos = []
 
-    def selecionar_doc_na_tabela(df_subset, colunas_tabela, rename_map, date_cols, key_prefix):
-        if df_subset.empty:
-            return None
+        if "anexos" in df.columns:
+            df["anexos"] = df["anexos"].apply(normalizar_links_anexo)
+            df["_anexos_total"] = df["anexos"].apply(len)
+            df["_anexos_markdown"] = df["anexos"].apply(montar_links_markdown)
 
-        df_table = df_subset[["_doc_id"] + colunas_tabela].copy()
-        df_view = df_table.set_index("_doc_id")
-        labels = {c: rename_map.get(c, c) for c in colunas_tabela}
-        df_view = df_view.rename(columns=labels)
+            max_anexos = int(df["_anexos_total"].max()) if not df.empty else 0
+            for idx in range(1, max_anexos + 1):
+                nome_col = f"_anexo_link_{idx}"
+                colunas_link_anexos.append(nome_col)
+                df[nome_col] = df["anexos"].apply(lambda urls, i=idx - 1: urls[i] if i < len(urls) else None)
+
+        for c in cols_existentes:
+            if c == "anexos":
+                colunas_visiveis.append("_anexos_total")
+                colunas_visiveis.extend(colunas_link_anexos)
+            else:
+                colunas_visiveis.append(c)
+
+        colunas_visiveis = [c for c in colunas_visiveis if c in df.columns]
+        if not colunas_visiveis:
+            st.info("Não há colunas para exibição nesta categoria.")
+            return
+
+        df_view = df[colunas_visiveis].copy()
+
+        rotulos_colunas = {}
+        for c in colunas_visiveis:
+            if c == "_anexos_total":
+                rotulos_colunas[c] = "Qtd. de anexos"
+            elif c.startswith("_anexo_link_"):
+                rotulos_colunas[c] = f"Anexo {c.split('_')[-1]}"
+            else:
+                rotulos_colunas[c] = rename_map.get(c, c)
+
+        df_view = df_view.rename(columns=rotulos_colunas)
 
         coluna_config = {}
-        for c in colunas_tabela:
-            rotulo = labels[c]
-            if c in date_cols:
+        width_por_coluna = {
+            "status": "small",
+            "responsavel_nex": "small",
+            "solicitante": "medium",
+            "email": "large",
+            "tipo": "medium",
+            "tipo_evento": "medium",
+            "unidade": "medium",
+            "local_evento": "medium",
+            "solicitando_como": "small",
+            "canais": "medium",
+            "apoios_necessarios": "large",
+            "descricao": "large",
+        }
+
+        for c in colunas_visiveis:
+            rotulo = rotulos_colunas[c]
+            largura_padrao = width_por_coluna.get(c, "medium")
+
+            if c == "status":
+                coluna_config[rotulo] = st.column_config.SelectboxColumn(
+                    label=rotulo,
+                    width=largura_padrao,
+                    options=[
+                        STATUS_PENDENTE,
+                        STATUS_EM_PRODUCAO_ARTES,
+                        STATUS_CONCLUIDO,
+                        STATUS_APROVADO_ENVIADO,
+                    ],
+                )
+            elif c in date_cols:
                 coluna_config[rotulo] = st.column_config.DatetimeColumn(
                     label=rotulo,
                     width="medium",
                     format="DD/MM/YYYY - HH:mm",
                 )
+            elif c == "_anexos_total":
+                coluna_config[rotulo] = st.column_config.NumberColumn(
+                    label=rotulo,
+                    width="small",
+                    format="%d",
+                )
+            elif c.startswith("_anexo_link_"):
+                indice = c.split("_")[-1]
+                coluna_config[rotulo] = st.column_config.LinkColumn(
+                    label=rotulo,
+                    width="small",
+                    display_text=f"Abrir {indice}",
+                )
             elif c == "descricao":
-                coluna_config[rotulo] = st.column_config.TextColumn(label=rotulo, width="large")
+                coluna_config[rotulo] = st.column_config.TextColumn(
+                    label=rotulo,
+                    width=largura_padrao,
+                )
             else:
-                coluna_config[rotulo] = st.column_config.TextColumn(label=rotulo, width="medium")
+                coluna_config[rotulo] = st.column_config.TextColumn(
+                    label=rotulo,
+                    width=largura_padrao,
+                )
 
-        altura = min(560, max(180, 110 + (len(df_view) * 38)))
-        widget_version = st.session_state.get(f"{key_prefix}_widget_version", 0)
+        altura_tabela = min(680, max(260, 110 + (len(df_view) * 42)))
         table_state = st.dataframe(
             df_view,
-            key=f"{key_prefix}_table_v{widget_version}",
+            key=f"{table_prefix}_dataframe",
             width="stretch",
-            height=altura,
+            height=altura_tabela,
             hide_index=True,
-            row_height=40,
+            row_height=44,
             column_config=coluna_config,
             on_select="rerun",
             selection_mode="single-row",
         )
 
-        selecionadas = []
+        st.caption("Selecione uma linha para visualizar os detalhes e anexos em Markdown clicável.")
+
+        linhas_selecionadas = []
         if hasattr(table_state, "selection"):
-            sel = table_state.selection
-            if isinstance(sel, dict):
-                selecionadas = sel.get("rows", []) or []
-            elif hasattr(sel, "rows"):
-                selecionadas = sel.rows or []
+            selection = table_state.selection
+            if isinstance(selection, dict):
+                linhas_selecionadas = selection.get("rows", []) or []
+            elif hasattr(selection, "rows"):
+                linhas_selecionadas = selection.rows or []
 
-        if not selecionadas:
-            return None
+        if linhas_selecionadas:
+            idx = linhas_selecionadas[0]
+            linha_detalhe = df.iloc[idx]
 
-        idx = selecionadas[0]
-        if idx < 0 or idx >= len(df_table):
-            return None
-        return valor_texto(df_table.iloc[idx]["_doc_id"])
-
-    def bloco_acoes_detalhe(collection_name, sol_sel, key_prefix):
-        if collection_name != "solicitacoes":
-            return
-
-        doc_id = valor_texto(sol_sel.get("id"))
-        if not doc_id:
-            st.warning("Solicita\u00e7\u00e3o sem ID. N\u00e3o foi poss\u00edvel habilitar a\u00e7\u00f5es.")
-            return
-
-        status_atual = sol_sel.get("status", STATUS_PENDENTE)
-        status_norm = normalizar_status(status_atual)
-
-        if status_norm == normalizar_status(STATUS_PENDENTE):
-            st.markdown("### Definir respons\u00e1vel")
-            atual = valor_texto(sol_sel.get("responsavel_nex")) or RESPONSAVEL_NEX_NAO_DEFINIDO
-            opcoes = [RESPONSAVEL_NEX_NAO_DEFINIDO] + [r for r in RESPONSAVEIS_NEX_OPCOES if r != RESPONSAVEL_NEX_NAO_DEFINIDO]
-            if atual not in opcoes:
-                opcoes.append(atual)
-
-            with st.form(key=f"{key_prefix}_form_assumir"):
-                responsavel_novo = st.selectbox(
-                    "Respons\u00e1vel NEX",
-                    opcoes,
-                    index=opcoes.index(atual),
-                    key=f"{key_prefix}_form_nex_select",
-                )
-                confirmou = st.form_submit_button("Confirmar e mover para Em andamento", type="primary")
-
-            if confirmou:
-                if responsavel_novo == RESPONSAVEL_NEX_NAO_DEFINIDO:
-                    st.error("Selecione um respons\u00e1vel NEX v\u00e1lido.")
-                    return
-
-                campos = {
-                    "responsavel_nex": responsavel_novo,
-                    "status": STATUS_EM_PRODUCAO_ARTES,
-                    "data_inicio_producao": datetime.now(),
-                }
-
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
-                if not ok:
-                    st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
-                    return
-
-                sol_atualizada = {**sol_sel, **campos}
-                erros = notificar_inicio_producao(sol_atualizada, responsavel_novo)
-                for erro in erros:
-                    st.warning(erro)
-
-                st.success("Solicita\u00e7\u00e3o atualizada com sucesso.")
-                st.rerun()
-            return
-
-        if status_norm == normalizar_status(STATUS_EM_PRODUCAO_ARTES):
-            st.markdown("### Submeter Resposta")
-            links_ja_salvos = [
-                u for u in (sol_sel.get("resposta_nex_anexos") or [])
-                if isinstance(u, str) and u.strip()
-            ]
-
-            with st.form(key=f"{key_prefix}_form_resposta"):
-                texto_inicial = valor_texto(sol_sel.get("resposta_nex_texto"))
-                texto_final = st.text_area(
-                    "Texto da resposta",
-                    value=texto_inicial,
-                    height=220,
-                    key=f"{key_prefix}_form_resposta_texto",
-                )
-                arquivos = st.file_uploader(
-                    "Anexar entreg\u00e1veis (imagens e documentos)",
-                    type=["png", "jpg", "jpeg", "webp", "gif", "pdf"],
-                    accept_multiple_files=True,
-                    key=f"{key_prefix}_form_resposta_arquivos",
-                )
-                st.warning("Antes de submeter para confer\u00eancia, fa\u00e7a este checklist final:")
-                st.markdown(
-                    "1. **Confer\u00eancia do escopo:** confira se tudo que foi solicitado est\u00e1 no material entreg\u00e1vel."
-                )
-                st.markdown(
-                    "2. **Confer\u00eancia textual:** revise portugu\u00eas, acentua\u00e7\u00e3o e poss\u00edveis erros de escrita."
-                )
-                st.markdown(
-                    "3. **Confer\u00eancia visual:** verifique distribui\u00e7\u00e3o dos elementos, identidade visual e qualidade final da pe\u00e7a."
-                )
-
-                if links_ja_salvos:
-                    render_links_markdown(links_ja_salvos, "Anexos de resposta j\u00e1 salvos")
-
-                submeteu = st.form_submit_button("Submeter para confer\u00eancia", type="primary")
-
-            if submeteu:
-                texto_final = (texto_final or "").strip()
-                links_resposta = list(links_ja_salvos)
-
-                for arquivo in (arquivos or []):
-                    mime = arquivo.type or "application/octet-stream"
-                    url = upload_to_storage(arquivo.getvalue(), arquivo.name, mime)
-                    if url:
-                        links_resposta.append(url)
-
-                if not texto_final and not links_resposta:
-                    st.error("Informe um texto e/ou anexe entreg\u00e1veis para submeter.")
-                    return
-
-                campos = {
-                    "resposta_nex_texto": texto_final,
-                    "resposta_nex_anexos": links_resposta,
-                    "status": STATUS_CONCLUIDO,
-                    "data_resposta_nex": datetime.now(),
-                }
-
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
-                if not ok:
-                    st.error("Falha ao enviar a resposta da solicita\u00e7\u00e3o.")
-                    return
-
-                sol_atualizada = {**sol_sel, **campos}
-                erros = notificar_conclusao_para_coordenador(
-                    sol_atualizada,
-                    texto_final,
-                    links_resposta,
-                )
-                for erro in erros:
-                    st.warning(erro)
-
-                st.success("Resposta submetida para confer\u00eancia.")
-                st.rerun()
-            return
-
-        if status_norm == normalizar_status(STATUS_CONCLUIDO):
-            st.markdown("### Conferir Resposta")
-            with st.form(key=f"{key_prefix}_form_conferencia"):
-                parecer = st.text_area(
-                    "Observa\u00e7\u00f5es da confer\u00eancia (opcional)",
-                    value=valor_texto(sol_sel.get("parecer_coordenador")),
-                    height=140,
-                    key=f"{key_prefix}_form_conferencia_parecer",
-                )
-                col_ok, col_back = st.columns(2)
-                with col_ok:
-                    aprovar = st.form_submit_button("OK e mover para Finalizado", type="primary")
-                with col_back:
-                    retornar = st.form_submit_button("Voltar para Em andamento")
-
-            if aprovar:
-                campos = {
-                    "status": STATUS_APROVADO_ENVIADO,
-                    "aprovado_final": True,
-                    "parecer_coordenador": (parecer or "").strip(),
-                    "data_aprovacao_final": datetime.now(),
-                }
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
-                if not ok:
-                    st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
-                    return
-
-                sol_atualizada = {**sol_sel, **campos}
-                resposta_texto = valor_texto(sol_sel.get("resposta_nex_texto"))
-                resposta_anexos = [
-                    u for u in (sol_sel.get("resposta_nex_anexos") or [])
-                    if isinstance(u, str) and u.strip()
-                ]
-                erros = notificar_aprovacao_final_para_solicitante(
-                    sol_atualizada,
-                    resposta_texto,
-                    resposta_anexos,
-                    parecer,
-                )
-                for erro in erros:
-                    st.warning(erro)
-
-                st.success("Solicita\u00e7\u00e3o finalizada com sucesso.")
-                st.rerun()
-
-            if retornar:
-                campos = {
-                    "status": STATUS_EM_PRODUCAO_ARTES,
-                    "aprovado_final": False,
-                    "parecer_coordenador": (parecer or "").strip(),
-                    "data_retorno_producao": datetime.now(),
-                }
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
-                if not ok:
-                    st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
-                    return
-
-                sol_atualizada = {**sol_sel, **campos}
-                erros = notificar_retorno_para_producao(sol_atualizada, parecer)
-                for erro in erros:
-                    st.warning(erro)
-
-                st.warning("Solicita\u00e7\u00e3o retornou para Em andamento.")
-                st.rerun()
-
-
-    def render_detalhes(sol_sel, row_sel, collection_name, colunas_detalhe, rename_map, date_cols, key_prefix):
-        st.markdown("### Visualiza\u00e7\u00e3o completa da solicita\u00e7\u00e3o")
-        with st.container(border=True):
-            def valor_campo(campo):
-                if campo in row_sel.index:
-                    return row_sel.get(campo)
-                return sol_sel.get(campo)
-
-            def texto_campo(campo, padrao="-"):
-                txt = valor_texto(valor_campo(campo))
-                return txt or padrao
-
-            def data_campo(campo):
-                return formatar_data_exibicao(valor_campo(campo))
-
-            if collection_name == "solicitacoes":
-                col_a, col_b, col_c = st.columns([1.25, 1.25, 1.0])
-
-                with col_a:
-                    st.markdown("#### Painel")
-                    st.markdown(
-                        f"**Status atual:** {badge_status_html(sol_sel.get('status', STATUS_PENDENTE))}",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        f"**Respons\u00e1vel NEX:** {valor_texto(sol_sel.get('responsavel_nex')) or RESPONSAVEL_NEX_NAO_DEFINIDO}"
-                    )
-                    st.markdown(f"**Tipo:** {texto_campo('tipo')}")
-                    st.markdown(f"**Canais:** {texto_campo('canais')}")
-                    st.markdown(f"**Anexos enviados:** {valor_texto(row_sel.get('_anexos_resumo')) or '0 anexo(s)'}")
-
-                with col_b:
-                    st.markdown("#### Solicitante")
-                    st.markdown(f"**Nome:** {texto_campo('solicitante')}")
-                    st.markdown(f"**E-mail:** {texto_campo('email')}")
-                    st.markdown(f"**Unidade:** {texto_campo('unidade')}")
-                    st.markdown(f"**Perfil:** {texto_campo('solicitando_como')}")
-
-                with col_c:
-                    st.markdown("#### Datas")
-                    st.markdown(f"**Publicar em:** {data_campo('data_publicacao')}")
-                    st.markdown(f"**Recebido em:** {data_campo('data_solicitacao')}")
-                    st.markdown(f"**Produ\u00e7\u00e3o iniciada:** {data_campo('data_inicio_producao')}")
-                    st.markdown(f"**Resposta enviada:** {data_campo('data_resposta_nex')}")
-
-                st.markdown("#### Descri\u00e7\u00e3o da demanda")
-                st.markdown(texto_campo("descricao"))
-
-                anexos_md = row_sel.get("_anexos_markdown", "Sem anexos.")
-                if anexos_md != "Sem anexos.":
-                    st.markdown("#### Anexos da solicita\u00e7\u00e3o")
-                    st.markdown(anexos_md)
-
-                texto_resp = valor_texto(sol_sel.get("resposta_nex_texto"))
-                links_resposta = [
-                    u for u in (sol_sel.get("resposta_nex_anexos") or [])
-                    if isinstance(u, str) and u.strip()
-                ]
-                if texto_resp or links_resposta:
-                    st.markdown("#### Entrega da produ\u00e7\u00e3o")
-                    col_resp_txt, col_resp_files = st.columns([1.5, 1.0])
-                    with col_resp_txt:
-                        st.markdown("**Texto de resposta:**")
-                        st.markdown(texto_resp or "-")
-                    with col_resp_files:
-                        if links_resposta:
-                            render_links_markdown(links_resposta, "Anexos da resposta")
-                        else:
-                            st.caption("Sem anexos de resposta.")
-            else:
-                st.markdown(
-                    f"**Status atual:** {badge_status_html(sol_sel.get('status', STATUS_PENDENTE))}",
-                    unsafe_allow_html=True,
-                )
-                if "responsavel_nex" in colunas_detalhe:
-                    st.markdown(
-                        f"**Respons\u00e1vel NEX:** {valor_texto(sol_sel.get('responsavel_nex')) or RESPONSAVEL_NEX_NAO_DEFINIDO}"
-                    )
-
-                for c in colunas_detalhe:
-                    if c in {"status", "responsavel_nex"}:
-                        continue
+            with st.container(border=True):
+                st.markdown("**Detalhes da linha selecionada**")
+                for c in cols_existentes:
                     if c == "anexos":
-                        st.markdown("**Anexos:**")
-                        st.markdown(row_sel.get("_anexos_markdown", "Sem anexos."))
-                        continue
-                    if c not in row_sel.index:
+                        st.markdown("**Anexos**")
+                        st.markdown(linha_detalhe.get("_anexos_markdown", "Sem anexos."))
                         continue
 
-                    valor = row_sel.get(c)
-                    if c in date_cols:
-                        valor_fmt = formatar_data_exibicao(valor)
+                    valor = linha_detalhe.get(c)
+                    if isinstance(valor, pd.Timestamp):
+                        valor = valor.strftime("%d/%m/%Y - %H:%M")
+                    elif valor is None:
+                        valor = "-"
+                    elif isinstance(valor, str) and not valor.strip():
+                        valor = "-"
                     else:
-                        valor_fmt = valor_texto(valor) or "-"
-                    st.markdown(f"**{rename_map.get(c, c)}:** {valor_fmt}")
+                        try:
+                            if pd.isna(valor):
+                                valor = "-"
+                        except Exception:
+                            pass
 
-            bloco_acoes_detalhe(collection_name, sol_sel, key_prefix)
+                    st.markdown(f"**{rename_map.get(c, c)}:** {valor}")
 
-    def render_collection(
-        collection_name,
-        section_title,
-        colunas_tabela,
-        colunas_detalhe,
-        rename_map,
-        date_cols,
-        table_prefix,
-        separar_por_status=False,
-    ):
-        st.subheader(section_title)
-        df_all, map_por_id = build_collection_data(collection_name, colunas_detalhe, date_cols)
-        if df_all is None or df_all.empty:
-            st.info("Nenhuma solicita\u00e7\u00e3o encontrada nesta categoria.")
-            return
-
-        active_table_key = f"{table_prefix}_active_table"
-        active_doc_key = f"{table_prefix}_active_doc"
-        active_table = st.session_state.get(active_table_key, "")
-        active_doc = st.session_state.get(active_doc_key, "")
-
-        if not separar_por_status:
-            table_id = f"{table_prefix}_geral"
-            state_key = f"{table_prefix}_geral_selected_doc"
-            doc_sel = selecionar_doc_na_tabela(
-                df_all,
-                colunas_tabela,
-                rename_map,
-                date_cols,
-                table_id,
-            )
-            if doc_sel:
-                st.session_state[state_key] = doc_sel
-                st.session_state[active_table_key] = table_id
-                st.session_state[active_doc_key] = doc_sel
-                active_table = table_id
-                active_doc = doc_sel
-            else:
-                st.session_state.pop(state_key, None)
-                if st.session_state.get(active_table_key) == table_id:
-                    st.session_state.pop(active_table_key, None)
-                    st.session_state.pop(active_doc_key, None)
-                    active_table = ""
-                    active_doc = ""
-
-            selected_doc = st.session_state.get(state_key)
-            if active_table == table_id and selected_doc and selected_doc == active_doc and selected_doc in map_por_id:
-                row_match = df_all[df_all["_doc_id"] == selected_doc]
-                if not row_match.empty:
-                    sol_sel = map_por_id.get(selected_doc, {})
-                    row_sel = row_match.iloc[0]
-                    render_detalhes(
-                        sol_sel,
-                        row_sel,
-                        collection_name,
-                        colunas_detalhe,
-                        rename_map,
-                        date_cols,
-                        f"{table_prefix}_geral_detalhe",
-                    )
-            return
-
-        status_sections = [
-            ("pendente", STATUS_PENDENTE, "Fila Pendente"),
-            ("andamento", STATUS_EM_PRODUCAO_ARTES, "Fila Em Andamento"),
-            ("conferir", STATUS_CONCLUIDO, "Fila Para Conferir"),
-            ("finalizado", STATUS_APROVADO_ENVIADO, "Fila Finalizada"),
-        ]
-
-        sections = []
-        conhecidos = set()
-        for sec_key, status_ref, titulo in status_sections:
-            table_id = f"{table_prefix}_{sec_key}"
-            norm = normalizar_status(status_ref)
-            conhecidos.add(norm)
-            df_sec = df_all[df_all["_status_norm"] == norm].copy()
-            sections.append(
-                {
-                    "sec_key": sec_key,
-                    "status_ref": status_ref,
-                    "titulo": titulo,
-                    "table_id": table_id,
-                    "df": df_sec,
-                    "detail_key": f"{table_prefix}_{sec_key}_detalhe",
-                }
-            )
-
-        df_outros = df_all[~df_all["_status_norm"].isin(conhecidos)].copy()
-        if not df_outros.empty:
-            sections.append(
-                {
-                    "sec_key": "outros",
-                    "status_ref": "outros",
-                    "titulo": "Fila Outros Status",
-                    "table_id": f"{table_prefix}_outros",
-                    "df": df_outros,
-                    "detail_key": f"{table_prefix}_outros_detalhe",
-                }
-            )
-
-        selecao_por_tabela = {}
-        secao_por_tabela = {}
-        slot_detalhe_por_tabela = {}
-
-        for sec in sections:
-            table_id = sec["table_id"]
-            state_key = f"{table_id}_selected_doc"
-            secao_por_tabela[table_id] = sec
-
-            section_header(sec["titulo"], sec["status_ref"], len(sec["df"]))
-            doc_sel = selecionar_doc_na_tabela(
-                sec["df"],
-                colunas_tabela,
-                rename_map,
-                date_cols,
-                table_id,
-            )
-            selecao_por_tabela[table_id] = doc_sel
-            slot_detalhe_por_tabela[table_id] = st.empty()
-
-        table_ids = [sec["table_id"] for sec in sections]
-        prev_active_table = st.session_state.get(active_table_key, "")
-
-        tabelas_selecionadas = [tid for tid in table_ids if selecao_por_tabela.get(tid)]
-        novo_active_table = ""
-        novo_active_doc = ""
-        if tabelas_selecionadas:
-            if prev_active_table in tabelas_selecionadas and len(tabelas_selecionadas) == 1:
-                novo_active_table = prev_active_table
-            elif prev_active_table in tabelas_selecionadas:
-                alternativas = [tid for tid in tabelas_selecionadas if tid != prev_active_table]
-                novo_active_table = alternativas[0] if alternativas else prev_active_table
-            else:
-                novo_active_table = tabelas_selecionadas[0]
-            novo_active_doc = selecao_por_tabela.get(novo_active_table, "")
-
-        reset_visual = False
-        if novo_active_table:
-            st.session_state[active_table_key] = novo_active_table
-            st.session_state[active_doc_key] = novo_active_doc
-            for tid in table_ids:
-                state_key = f"{tid}_selected_doc"
-                if tid == novo_active_table:
-                    st.session_state[state_key] = novo_active_doc
-                    continue
-                st.session_state.pop(state_key, None)
-                if selecao_por_tabela.get(tid):
-                    ver_key = f"{tid}_widget_version"
-                    st.session_state[ver_key] = st.session_state.get(ver_key, 0) + 1
-                    reset_visual = True
-        else:
-            st.session_state.pop(active_table_key, None)
-            st.session_state.pop(active_doc_key, None)
-            for tid in table_ids:
-                state_key = f"{tid}_selected_doc"
-                st.session_state.pop(state_key, None)
-                if selecao_por_tabela.get(tid):
-                    ver_key = f"{tid}_widget_version"
-                    st.session_state[ver_key] = st.session_state.get(ver_key, 0) + 1
-                    reset_visual = True
-
-        if reset_visual:
-            st.rerun()
-
-        active_table = st.session_state.get(active_table_key, "")
-        active_doc = st.session_state.get(active_doc_key, "")
-        if active_table and active_doc and active_table in secao_por_tabela and active_doc in map_por_id:
-            sec = secao_por_tabela[active_table]
-            row_match = sec["df"][sec["df"]["_doc_id"] == active_doc]
-            if not row_match.empty:
-                sol_sel = map_por_id.get(active_doc, {})
-                row_sel = row_match.iloc[0]
-                with slot_detalhe_por_tabela[active_table].container():
-                    render_detalhes(
-                        sol_sel,
-                        row_sel,
-                        collection_name,
-                        colunas_detalhe,
-                        rename_map,
-                        date_cols,
-                        sec["detail_key"],
-                    )
-
-
-    if tipo_pagina in ("ambas", "criativos"):
-        render_collection(
-            collection_name="solicitacoes",
-            section_title="Solicita\u00e7\u00f5es de Criativos e Divulga\u00e7\u00e3o",
-            colunas_tabela=[
-                "data_publicacao",
-                "data_solicitacao",
-                "solicitante",
-                "tipo",
-                "responsavel_nex",
-                "_anexos_resumo",
-            ],
-            colunas_detalhe=[
-                "status",
-                "responsavel_nex",
-                "data_publicacao",
-                "data_solicitacao",
-                "solicitante",
-                "email",
-                "tipo",
-                "canais",
-                "unidade",
-                "solicitando_como",
-                "descricao",
-                "anexos",
-            ],
-            rename_map={
-                "status": "Status",
-                "responsavel_nex": "NEX",
-                "data_publicacao": "Publicar em",
-                "data_solicitacao": "Recebido em",
-                "solicitante": "Solicitante",
-                "email": "E-mail",
-                "tipo": "Tipo",
-                "canais": "Canais",
-                "unidade": "Unidade",
-                "solicitando_como": "Perfil",
-                "descricao": "Descri\u00e7\u00e3o",
-                "anexos": "Anexos",
-                "_anexos_resumo": "Anexos",
-            },
-            date_cols=["data_solicitacao", "data_publicacao"],
-            table_prefix="divulgacao",
-            separar_por_status=True,
-        )
-
-    if tipo_pagina == "ambas":
-        st.divider()
-
-    if tipo_pagina in ("ambas", "apoio"):
-        render_collection(
-            collection_name="solicitacoes_eventos_transmissoes",
-            section_title="Solicita\u00e7\u00f5es de Apoio T\u00e9cnico",
-            colunas_tabela=[
-                "_status_visual",
-                "periodo_inicio",
-                "periodo_fim",
-                "solicitante",
-                "tipo_evento",
-                "local_evento",
-                "responsavel_nex",
-                "_anexos_resumo",
-            ],
-            colunas_detalhe=[
-                "status",
-                "responsavel_nex",
-                "periodo_inicio",
-                "periodo_fim",
-                "data_solicitacao",
-                "solicitante",
-                "email",
-                "tipo_evento",
-                "local_evento",
-                "apoios_necessarios",
-                "unidade",
-                "solicitando_como",
-                "descricao",
-                "anexos",
-            ],
-            rename_map={
-                "_status_visual": "Etapa",
-                "status": "Status",
-                "responsavel_nex": "NEX",
-                "periodo_inicio": "In\u00edcio",
-                "periodo_fim": "Fim",
-                "data_solicitacao": "Recebido em",
-                "solicitante": "Solicitante",
-                "email": "E-mail",
-                "tipo_evento": "Evento",
-                "local_evento": "Local",
-                "apoios_necessarios": "Apoios",
-                "unidade": "Unidade",
-                "solicitando_como": "Perfil",
-                "descricao": "Descri\u00e7\u00e3o",
-                "anexos": "Anexos",
-                "_anexos_resumo": "Anexos",
-            },
-            date_cols=["data_solicitacao", "periodo_inicio", "periodo_fim"],
-            table_prefix="eventos",
-            separar_por_status=False,
-        )
-
-def page_todas_solicitacoes_criativos():
-    page_todas_solicitacoes(tipo_pagina="criativos")
-
-
-def page_todas_solicitacoes_apoio_tecnico():
-    page_todas_solicitacoes(tipo_pagina="apoio")
-
-
-def page_sobre():
-    render_header_banner()
-    st.header("Sobre a Plataforma Comunica IME")
-    st.markdown(
-        """
-### 1. O que este app faz (visão simples)
-Esta plataforma centraliza os pedidos de comunicação do departamento em um fluxo único.
-Em vez de demandas espalhadas por e-mail, WhatsApp e conversas paralelas, tudo entra no mesmo lugar:
-
-1. A solicitação é criada com descrição e anexos.
-2. A equipe NEX assume a demanda.
-3. A produção é submetida para conferência.
-4. A demanda é finalizada e devolvida ao solicitante.
-
-Em termos práticos, o sistema funciona como um painel de produção com rastreabilidade de ponta a ponta.
-
-### 2. Como a plataforma está organizada (arquitetura)
-O app está dividido em três camadas:
-
-1. Camada de interface (Streamlit):
-- formulários, tabelas, botões e visualizações.
-- validação dos campos na entrada.
-- interação operacional com status e responsáveis.
-
-2. Camada de serviços (`app_core`):
-- configuração (`config`).
-- cliente HTTP (`http`).
-- integração com Firestore e Storage (`firebase`).
-- envio de notificações por e-mail (`emailer`).
-- instruções de IA (`prompts`).
-
-3. Camada de dados (Firebase):
-- Firestore: metadados, textos, status, datas e responsáveis.
-- Storage: arquivos anexados e entregáveis.
-
-### 3. Fluxo de back-end (passo a passo)
-Quando uma solicitação é enviada:
-
-1. O formulário valida campos obrigatórios.
-2. Os anexos são enviados para o Storage.
-3. O documento é gravado no Firestore com status inicial.
-4. O sistema pode enviar e-mail de confirmação.
-
-Depois, no fluxo interno:
-
-1. `Pendente`:
-- responsável NEX é definido.
-- status muda para `Em produção das artes`.
-
-2. `Em produção das artes`:
-- equipe registra texto de resposta e anexos de entrega.
-- status muda para `Concluído` (fila para conferir).
-
-3. `Concluído`:
-- pode ir para finalização (`Aprovado e enviado`) ou retornar para andamento.
-
-4. `Aprovado e enviado`:
-- etapa final; sem ação operacional.
-
-### 4. Coleções principais no banco
-1. `solicitacoes`:
-- pedidos de criativos e divulgação.
-- campos típicos: `status`, `solicitante`, `email`, `tipo`, `descricao`, `canais`, `anexos`, `responsavel_nex`, datas e entrega.
-
-2. `solicitacoes_eventos_transmissoes`:
-- pedidos de apoio técnico e eventos.
-- campos de período, local, apoios necessários e anexos.
-
-3. `conteudos`:
-- conteúdos para publicação no site.
-
-### 5. Como os anexos funcionam
-Os arquivos não ficam armazenados “dentro” do Firestore.
-O arquivo sobe para o Storage e o Firestore guarda o link.
-Isso melhora desempenho, reduz custo de leitura e facilita manutenção.
-
-### 6. Modelos de IA usados no app
-No módulo de proposta de conteúdo:
-
-1. Texto multicanal:
-- `gemini-3.1-flash-lite-preview`.
-- gera versões para Instagram, WhatsApp, E-mail, LinkedIn e Site.
-
-2. Imagem:
-- `gemini-3-pro-image-preview`.
-- gera arte com base no briefing e nos anexos.
-
-As tentativas podem ser salvas em `tentativas_ia`.
-
-### 7. Organização operacional atual
-1. Entrada:
-- Solicitação de Criativos e Divulgação.
-- Solicitação de Apoio Técnico a Eventos e Transmissões.
-
-2. Controle:
-- Solicitações de Criativos (separadas por status).
-- Solicitações de Apoio Técnico.
-- Conferência e finalização inline na visualização das solicitações.
-
-3. Apoio:
-- Gerador de Proposta de Conteúdo.
-- Publicar Notícia no site.
-
-### 8. Resumo para quem não é técnico
-Pense no sistema como uma linha de produção digital:
-
-1. Pedido entra.
-2. Banco registra.
-3. Equipe executa.
-4. Coordenador confere.
-5. Pedido finaliza.
-
-Tudo fica registrado: o que foi pedido, quem fez, quando mudou de etapa e quais arquivos foram entregues.
-"""
+    render_collection_table(
+        collection_name="solicitacoes",
+        section_title="Solicitações de Divulgação",
+        colunas_ordem=[
+            "status",
+            "data_publicacao",
+            "data_solicitacao",
+            "solicitante",
+            "tipo",
+            "canais",
+            "unidade",
+            "responsavel_nex",
+            "solicitando_como",
+            "email",
+            "descricao",
+            "anexos",
+        ],
+        rename_map={
+            "status": "Status",
+            "data_publicacao": "Publicar em",
+            "data_solicitacao": "Recebido em",
+            "solicitante": "Solicitante",
+            "tipo": "Tipo",
+            "canais": "Canais",
+            "unidade": "Unidade",
+            "responsavel_nex": "NEX",
+            "solicitando_como": "Perfil",
+            "email": "E-mail",
+            "descricao": "Descricao",
+            "anexos": "Anexos",
+        },
+        date_cols=["data_solicitacao", "data_publicacao"],
+        table_prefix="divulgacao",
     )
-    st.markdown(
-        """
-### 9. Exemplo prático de registros no banco
-Abaixo estão exemplos simplificados de documentos salvos no Firestore.
-"""
+
+    st.divider()
+
+    render_collection_table(
+        collection_name="solicitacoes_eventos_transmissoes",
+        section_title="Solicitações de Apoio a Eventos e Transmissões",
+        colunas_ordem=[
+            "status",
+            "periodo_inicio",
+            "periodo_fim",
+            "data_solicitacao",
+            "solicitante",
+            "tipo_evento",
+            "local_evento",
+            "apoios_necessarios",
+            "unidade",
+            "solicitando_como",
+            "email",
+            "descricao",
+            "anexos",
+        ],
+        rename_map={
+            "status": "Status",
+            "periodo_inicio": "Inicio",
+            "periodo_fim": "Fim",
+            "data_solicitacao": "Recebido em",
+            "solicitante": "Solicitante",
+            "tipo_evento": "Evento",
+            "local_evento": "Local",
+            "apoios_necessarios": "Apoios",
+            "unidade": "Unidade",
+            "solicitando_como": "Perfil",
+            "email": "E-mail",
+            "descricao": "Descricao",
+            "anexos": "Anexos",
+        },
+        date_cols=["data_solicitacao", "periodo_inicio", "periodo_fim"],
+        table_prefix="eventos",
     )
-    st.code(
-        """
-{
-  "coleção": "solicitacoes",
-  "documento": {
-    "id": "abc123",
-    "status": "Em produção das artes",
-    "solicitante": "Nome da pessoa",
-    "email": "pessoa@ufba.br",
-    "tipo": "Evento",
-    "descricao": "Texto da demanda",
-    "canais": ["Instagram", "Site"],
-    "anexos": ["https://.../anexo1.png", "https://.../anexo2.pdf"],
-    "responsavel_nex": "Nathalie",
-    "resposta_nex_texto": "",
-    "resposta_nex_anexos": [],
-    "data_solicitacao": "timestamp",
-    "data_inicio_producao": "timestamp"
-  }
-}
-        """.strip(),
-        language="json",
-    )
-    st.code(
-        """
-{
-  "coleção": "solicitacoes_eventos_transmissoes",
-  "documento": {
-    "id": "evt789",
-    "status": "Pendente",
-    "solicitante": "Nome da pessoa",
-    "tipo_evento": "Seminário",
-    "local_evento": "Auditório Maria Zezé",
-    "periodo_inicio": "timestamp",
-    "periodo_fim": "timestamp",
-    "apoios_necessarios": ["Microfone", "Transmissão ao vivo"],
-    "descricao": "Detalhes do apoio",
-    "anexos": ["https://.../briefing.pdf"]
-  }
-}
-        """.strip(),
-        language="json",
-    )
-    st.markdown(
-        """
-### 10. Gatilhos de notificação (e-mails)
-O sistema pode disparar e-mails em momentos-chave:
 
-1. Confirmação de recebimento da solicitação.
-2. Aviso de entrada em produção.
-3. Aviso de submissão para conferência.
-4. Aviso de aprovação final ao solicitante.
-5. Aviso de retorno para produção quando há ajustes.
-
-Isso mantém solicitante, coordenação e equipe alinhados sem operação manual.
-"""
-    )
-    st.markdown(
-        """
-### 11. Como a seleção das tabelas funciona
-Nas telas de controle:
-
-1. Cada tabela mostra uma fila (status).
-2. Ao selecionar uma linha, aparece a visualização completa daquela solicitação.
-3. Só pode existir uma seleção ativa por vez na página.
-4. Se você selecionar outra linha em outra fila, a anterior é desmarcada.
-5. Se desmarcar a linha ativa, a visualização desaparece.
-"""
-    )
-    st.markdown(
-        """
-### 12. Onde entram os modelos de IA no fluxo
-Os modelos de IA não substituem o processo da demanda; eles aceleram a criação de proposta.
-
-1. IA de texto: gera copys por canal.
-2. IA de imagem: gera arte inicial para validação.
-3. O resultado é salvo em histórico (`tentativas_ia`) para comparação.
-
-Ou seja: a IA é um motor de apoio dentro do processo, não o processo completo.
-"""
-    )
-    st.markdown(
-        """
-### 13. Diferença entre Front-end e Back-end neste app
-Front-end (o que você vê):
-
-1. Formulários.
-2. Tabelas.
-3. Botões de ação.
-4. Visualização da solicitação.
-
-Back-end (o que acontece por trás):
-
-1. Validação da entrada.
-2. Upload de anexos para Storage.
-3. Persistência de dados no Firestore.
-4. Mudança de status e rastreio por data/responsável.
-5. Notificações por e-mail.
-6. Integrações com IA quando necessário.
-"""
-    )
-    st.markdown(
-        """
-### 14. Em uma frase
-Esta plataforma organiza solicitações em um pipeline rastreável, com dados persistidos, anexos centralizados, controle por status e comunicação automatizada.
-"""
-    )
-    render_persistent_footer()
-
-# Montagem das Paginas e Menu Lateral
+# Montagem das Páginas e Menu Lateral
 pg = st.navigation({
-    "Central de Solicita\u00e7\u00f5es": [
-        st.Page(page_solicitar_publicacao, title="Solicita\u00e7\u00e3o de Criativos e Divulga\u00e7\u00e3o", icon="\U0001F3A8", default=True),
-        st.Page(page_solicitar_apoio_eventos_transmissoes, title="Solicita\u00e7\u00e3o de Apoio T\u00e9cnico a Eventos e Transmiss\u00f5es", icon="\U0001F3A5")
+    "Central de Solicitações": [
+        st.Page(page_solicitar_publicacao, title="Solicitação de Criativos e Divulgação", icon="\U0001F3A8", default=True),
+        st.Page(page_solicitar_apoio_eventos_transmissoes, title="Solicitação de Apoio Técnico a Eventos e Transmissões", icon="\U0001F3A5")
     ],
-    "Painel de Controle NEX": [
-        st.Page(page_todas_solicitacoes_criativos, title="Solicita\u00e7\u00f5es de Criativos", icon="\U0001F4CB"),
-        st.Page(page_todas_solicitacoes_apoio_tecnico, title="Solicita\u00e7\u00f5es de Apoio T\u00e9cnico", icon="\U0001F39A")
+    "Controle Next": [
+        st.Page(page_gestao_producao_nex, title="Gestao de Producao NEX", icon="\U0001F6E0"),
+        st.Page(page_responder_demanda, title="Responder Demanda", icon="\u270D"),
+        st.Page(page_aprovacao_final_demanda, title="Aprovacao Final da Demanda", icon="\u2705"),
+        st.Page(page_todas_solicitacoes, title="Todas as Solicitacoes", icon="\U0001F4CB")
     ],
-    "Em Constru\u00e7\u00e3o": [
-        st.Page(page_dashboard_solicitacoes, title="Gerador de Proposta de Conte\u00fado", icon="\U0001F4CA"),
-        st.Page(page_adicionar_noticia, title="Publicar Not\u00edcia no site do DEST", icon="\U0001F4F0")
-    ],
-    "Sobre": [
-        st.Page(page_sobre, title="Sobre a Plataforma", icon="\u2139")
+    "Em Construção": [
+        st.Page(page_dashboard_solicitacoes, title="Gerador de Proposta de Conteúdo", icon="\U0001F4CA"),
+        st.Page(page_adicionar_noticia, title="Publicar Notícia no site do DEST", icon="\U0001F4F0")
     ]
 })
 
 pg.run()
+
+
