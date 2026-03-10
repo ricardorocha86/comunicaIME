@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import io
 import json
 import os
@@ -28,7 +29,7 @@ from app_core.domain import (
 from app_core.emailer import EmailNotifier, SubmissionEmailPayload
 from app_core.firebase import FirebaseClient
 from app_core.http import HttpClient
-from app_core.prompts import INSTRUCAO_IDENTIDADE_TEXTO, INSTRUCAO_IDENTIDADE_VISUAL
+from app_core.prompts import PROMPT_SISTEMA_TEXTO, PROMPT_SISTEMA_VISUAL
 
 st.set_page_config(page_title="Comunica IME", layout="centered")
 
@@ -842,14 +843,31 @@ def page_solicitar_apoio_eventos_transmissoes():
 
 
 def page_dashboard_solicitacoes():
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            max-width: 1200px !important;
+            padding-top: 2rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
     render_header_banner()
     st.header("📊 Dashboard de Solicitações")
     st.markdown("Gerenciamento de todas as demandas de comunicação enviadas pelos docentes.")
     
-    solicitacoes = listar_documentos("solicitacoes")
+    solicitacoes_todas = listar_documentos("solicitacoes")
+    
+    # Filtra apenas solicitações com status "Em produção das artes" (Em andamento)
+    solicitacoes = [
+        s for s in solicitacoes_todas 
+        if normalizar_status(s.get("status")) == normalizar_status(STATUS_EM_PRODUCAO_ARTES)
+    ]
     
     if not solicitacoes:
-        st.info("Nenhuma solicitação encontrada no banco de dados.")
+        st.info("Nenhuma solicitação em andamento encontrada.")
         render_persistent_footer()
         return
 
@@ -887,353 +905,313 @@ def page_dashboard_solicitacoes():
         except:
             return "Arquivo"
 
-    col_list, col_details = st.columns([1, 2])
+    # Layout Sequencial: Primeiro a seleção, depois os detalhes
+    st.subheader("📋 Selecione uma Solicitação")
     
-    with col_list:
-        with st.container(border=True):
-            st.subheader("📋 Lista de Solicitações")
-            
-            # Cria as opções para o Radio button
-            opcoes_radio = []
-            dict_sols = {}
-            for sol in solicitacoes:
-                status = sol.get("status", STATUS_PENDENTE)
-                urgente = sol.get("urgencia", False)
-                header_prefix = "🚨 " if urgente and status_eh_pendente(status) else ""
-                if status_eh_pendente(status):
-                    status_icon = "⏳"
-                elif status_eh_em_producao(status):
-                    status_icon = "🎨"
-                elif (
-                    status_eh_concluido(status)
-                    or normalizar_status(status) == normalizar_status(STATUS_APROVADO_ENVIADO)
-                    or normalizar_status(status) == "feito"
-                ):
-                    status_icon = "✅"
-                else:
-                    status_icon = "❌"
-                
-                tipo = sol.get('tipo', 'Solicitação').upper()
-                nome = sol.get('solicitante', '')
-                
-                titulo_opcao = f"{status_icon} {header_prefix}{tipo} — {nome}"
-                opcoes_radio.append(titulo_opcao)
-                dict_sols[titulo_opcao] = sol
-                
-            selecionado = st.selectbox("Selecione um pedido", opcoes_radio, label_visibility="collapsed")
+    # Cria as opções para o Radio button
+    opcoes_radio = []
+    dict_sols = {}
+    for sol in solicitacoes:
+        status = sol.get("status", STATUS_PENDENTE)
+        urgente = sol.get("urgencia", False)
+        header_prefix = "🚨 " if urgente and status_eh_pendente(status) else ""
+        if status_eh_pendente(status):
+            status_icon = "⏳"
+        elif status_eh_em_producao(status):
+            status_icon = "🎨"
+        elif (
+            status_eh_concluido(status)
+            or normalizar_status(status) == normalizar_status(STATUS_APROVADO_ENVIADO)
+            or normalizar_status(status) == "feito"
+        ):
+            status_icon = "✅"
+        else:
+            status_icon = "❌"
         
-    with col_details:
+        tipo = sol.get('tipo', 'Solicitação').upper()
+        nome = sol.get('solicitante', '')
+        
+        titulo_opcao = f"{status_icon} {header_prefix}{tipo} — {nome}"
+        opcoes_radio.append(titulo_opcao)
+        dict_sols[titulo_opcao] = sol
+        
+    selecionado = st.selectbox("Selecione um pedido", opcoes_radio, label_visibility="collapsed")
+    st.divider()
+
+    if selecionado:
+        sol = dict_sols[selecionado]
+        
+        urgente = sol.get("urgencia", False)
+        status = sol.get("status", STATUS_PENDENTE)
+        
+        # Detalhes da Solicitação em um Card
         with st.container(border=True):
-            if selecionado:
-                sol = dict_sols[selecionado]
-                
-                urgente = sol.get("urgencia", False)
-                status = sol.get("status", STATUS_PENDENTE)
-                
-                # Parte Superior: Duas Colunas para dados rápidos
-                st.subheader(selecionado.replace("⏳ ", "").replace("🚨 ", "").replace("✅ ", "").replace("❌ ", ""))
-                
-                col_info1, col_info2 = st.columns(2)
-                
-                with col_info1:
-                    st.write(f"**📍 Unidade / Órgão:** {sol.get('unidade')}")
-                    st.write(f"**👤 Nome Solicitante:** {sol.get('solicitante')}")
-                    if sol.get("solicitando_como"):
-                        st.write(f"**🎭 Solicitando como:** {sol.get('solicitando_como')}")
-                
-                with col_info2:
-                    st.write(f"**Status:** {status}")
-                    st.write(f"**Responsavel NEX:** {sol.get('responsavel_nex', RESPONSAVEL_NEX_NAO_DEFINIDO)}")
-                    st.write(f"**📅 Publicar em:** `{formatar_br(sol.get('data_publicacao'))}`")
-                    st.write(f"**Canais:** {channels_label(sol.get('canais'))}")
-                
-                st.divider()
-                
-                # Parte Inferior: Uma Coluna para conteúdo denso
-                with st.expander("📝 Descrição Detalhada"):
-                    st.info(sol.get("descricao") or "Sem descrição fornecida.")
+            st.subheader(f"📝 {selecionado.replace('⏳ ', '').replace('🚨 ', '').replace('✅ ', '').replace('❌ ', '')}")
             
-                # Exibição Inteligente em Grid de 4 Colunas
-                anexos = sol.get("anexos", [])
-                if anexos:
-                    st.write("**📎 Materiais Anexados:**")
-                    if isinstance(anexos, str): anexos = [anexos]
-                
-                    # Processamento em grupos de 4 para o grid
-                    for i in range(0, len(anexos), 4):
-                        cols = st.columns(4)
-                        for j in range(4):
-                            if i + j < len(anexos):
-                                link = anexos[i + j]
-                                l_lower = str(link).lower()
-                                nome_arq = extrair_nome_arquivo(str(link))
+            col_info1, col_info2 = st.columns(2)
+            
+            with col_info1:
+                st.write(f"**📍 Unidade / Órgão:** {sol.get('unidade')}")
+                st.write(f"**👤 Nome Solicitante:** {sol.get('solicitante')}")
+                if sol.get("solicitando_como"):
+                    st.write(f"**🎭 Solicitando como:** {sol.get('solicitando_como')}")
+            
+            with col_info2:
+                st.write(f"**Status:** {status}")
+                st.write(f"**Responsavel NEX:** {sol.get('responsavel_nex', RESPONSAVEL_NEX_NAO_DEFINIDO)}")
+                st.write(f"**📅 Publicar em:** `{formatar_br(sol.get('data_publicacao'))}`")
+                st.write(f"**Canais:** {channels_label(sol.get('canais'))}")
+            
+            st.divider()
+            
+            with st.expander("🔍 Descrição Detalhada"):
+                st.info(sol.get("descricao") or "Sem descrição fornecida.")
+    
+            # Exibição Inteligente em Grid de 4 Colunas
+            anexos = sol.get("anexos", [])
+            if anexos:
+                st.write("**📎 Materiais Anexados:**")
+                if isinstance(anexos, str): anexos = [anexos]
+            
+                # Processamento em grupos de 4 para o grid
+                for i in range(0, len(anexos), 4):
+                    cols = st.columns(4)
+                    for j in range(4):
+                        if i + j < len(anexos):
+                            link = anexos[i + j]
+                            l_lower = str(link).lower()
+                            nome_arq = extrair_nome_arquivo(str(link))
+                        
+                            with cols[j]:
+                                # --- IMAGENS ---
+                                if any(ext in l_lower for ext in [".png", ".jpg", ".jpeg", ".webp"]) or ("alt=media" in l_lower and not any(a in l_lower for a in [".wav", ".mp3", ".pdf"])):
+                                    st.image(link, use_container_width=True)
+                                    st.markdown(f"🖼️ [**{nome_arq}**]({link})")
                             
-                                with cols[j]:
-                                    # --- IMAGENS ---
-                                    if any(ext in l_lower for ext in [".png", ".jpg", ".jpeg", ".webp"]) or ("alt=media" in l_lower and not any(a in l_lower for a in [".wav", ".mp3", ".pdf"])):
-                                        st.image(link, use_container_width=True)
-                                        st.markdown(f"🖼️ [**{nome_arq}**]({link})")
+                                # --- ÁUDIOS ---
+                                elif any(ext in l_lower for ext in [".wav", ".mp3", ".ogg"]):
+                                    st.audio(link)
+                                    st.markdown(f"🎵 [**{nome_arq}**]({link})")
                                 
-                                    # --- ÁUDIOS ---
-                                    elif any(ext in l_lower for ext in [".wav", ".mp3", ".ogg"]):
-                                        st.audio(link)
-                                        st.markdown(f"🎵 [**{nome_arq}**]({link})")
-                                    
-                                    # --- PDFS ---
-                                    elif ".pdf" in l_lower:
-                                        st.markdown(f"📄 [**{nome_arq}**]({link})")
-                                    
-                                    # --- OUTROS ---
-                                    else:
-                                        st.markdown(f"🔗 [**{nome_arq}**]({link})")
+                                # --- PDFS ---
+                                elif ".pdf" in l_lower:
+                                    st.markdown(f"📄 [**{nome_arq}**]({link})")
+                                
+                                # --- OUTROS ---
+                                else:
+                                    st.markdown(f"🔗 [**{nome_arq}**]({link})")
             
                 st.divider()
             
-                # Ações de Gerenciamento
-            
-                # Botão para gerar a arte
-                if st.button("Fazer Proposta de Conteúdo", key=f"ia_{sol['id']}", use_container_width=True, type="primary"):
+                # ÁREA DE IA
+                st.subheader("🤖 Gerador de Proposta com IA")
+                st.markdown("Forneça contexto adicional para que a IA gere 3 opções distintas de conteúdo em paralelo.")
+                
+                instrucoes_ia = st.text_area(
+                    "✍️ Instruções extras (opcional):",
+                    placeholder="Ex: Use um tom humorístico. Na imagem, inclua elementos tecnológicos verdes.",
+                    key=f"ins_ia_{sol['id']}"
+                )
+
+                # Seleção de Templates de Cards
+                st.markdown("🎨 **Selecione um Template de Card (opcional):**")
+                template_dir = os.path.join("assets", "templates-cards")
+                templates_list = ["Nenhum"]
+                if os.path.exists(template_dir):
+                    templates_list += [f for f in os.listdir(template_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                
+                # Exibir Previews dos Templates em Colunas
+                if len(templates_list) > 1:
+                    t_cols = st.columns(min(len(templates_list)-1, 5))
+                    for idx, t_file in enumerate(templates_list[1:]):
+                        with t_cols[idx % 5]:
+                            st.image(os.path.join(template_dir, t_file), use_container_width=True)
+                            st.caption(t_file.split('.')[0].replace('_', ' ').title())
+                
+                template_selecionado = st.radio(
+                    "Template escolhido:",
+                    options=templates_list,
+                    horizontal=True,
+                    key=f"tpl_ia_{sol['id']}",
+                    label_visibility="collapsed"
+                )
+
+                if st.button("🚀 Gerar 3 Opções de Proposta em Paralelo", key=f"ia_btn_{sol['id']}", use_container_width=True, type="primary"):
                     if GEMINI_API_KEY_SECRET:
                         client = genai.Client(api_key=GEMINI_API_KEY_SECRET)
-                        with st.status("⚙️ Estruturando Materiais da Solicitação...", expanded=True) as status_ia:
+                        
+                        async def perform_generation():
+                            # Containers para as 3 colunas
+                            cols = st.columns(3)
+                            
+                            # Preparar placeholders para status e timers em cada coluna
+                            p_status = [cols[i].empty() for i in range(3)]
+                            p_timers = [cols[i].empty() for i in range(3)]
+                            p_progress = [cols[i].empty() for i in range(3)]
+
                             try:
-                                tempo_inicio = time.time()
-                                # 1. Preparar Conteúdo Multimodal
-                                st.write("📥 Baixando e indexando anexos na base de dados...")
-                                contents = []
-                            
-                                # Adiciona a descrição e metadados como texto
-                                prompt_base = f"""
-                                {INSTRUCAO_IDENTIDADE_TEXTO}
-                                {INSTRUCAO_IDENTIDADE_VISUAL}
-                            
-                                DEMANDA DO USUÁRIO:
-                                - TIPO: {sol.get('tipo')}
-                                - SOLICITANTE/NOME: {sol.get('solicitante')}
-                                - UNIDADE/ÓRGÃO: {sol.get('unidade')}
-                                - SOLICITANDO COMO: {sol.get('solicitando_como', 'Não especificado')}
-                                - DESCRIÇÃO: {sol.get('descricao')}
-                            
-                                INSTRUÇÃO FINAL: 
-                                1. Gere uma LEGENDA completa e engajadora em Português.
-                                2. Gere uma imagem para o post que siga a identidade visual correta.
-                            
-                                Retorne a legenda primeiro.
-                                """
-                                contents.append(prompt_base)
-                                # Lista apenas com os anexos para reuso
+                                # 1. Preparar Conteúdo Multimodal (Upload único para economizar tempo)
+                                for p in p_status: p.info("📥 Preparando arquivos...")
                                 anexos_parts = []
-                                import tempfile
-                                import os
-                            
-                                # Re-define anexos para garantir acesso dentro do botão
                                 anexos_solicitacao = sol.get("anexos", [])
                                 if isinstance(anexos_solicitacao, str): anexos_solicitacao = [anexos_solicitacao]
 
                                 for link in anexos_solicitacao:
-                                    l_low = str(link).lower()
                                     nome_arq = extrair_nome_arquivo(link)
-                                    st.write(f"🔍 Preparando: **{nome_arq}**...")
-                                
-                                    # Determina MIME type oficial para upload via API Files
-                                    m_type = None
-                                    if ".pdf" in l_low: m_type = "application/pdf"
-                                    elif ".png" in l_low: m_type = "image/png"
-                                    elif any(x in l_low for x in [".jpg", ".jpeg"]): m_type = "image/jpeg"
-                                    elif ".webp" in l_low: m_type = "image/webp"
-                                    elif ".mp3" in l_low: m_type = "audio/mp3"
-                                    elif ".wav" in l_low: m_type = "audio/wav"
-                                    elif ".ogg" in l_low: m_type = "audio/ogg"
-                                
                                     try:
-                                        # Download e uso da API de Arquivos do Gemini (Protege contra limitação de Payload/Erro de Áudio)
                                         resp_file = HTTP.get(link)
                                         if resp_file.status_code == 200:
-                                            ext = os.path.splitext(nome_arq)[1].lower()
-                                            if not ext: ext = ".bin"
-                                        
+                                            ext = os.path.splitext(nome_arq)[1].lower() or ".bin"
                                             with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
                                                 tmp_file.write(resp_file.content)
                                                 tmp_path = tmp_file.name
-                                            
-                                            st.write(f"☁️ Fazendo upload nativo (File API)...")
                                             gemini_file = client.files.upload(file=tmp_path)
                                             anexos_parts.append(gemini_file)
-                                        
-                                            # Cleanup do arquivo temporário
-                                            try:
-                                                os.remove(tmp_path)
-                                            except:
-                                                pass
-                                            
-                                            st.write(f"✅ Anexo processado e indexado com sucesso.")
-                                        else:
-                                            st.warning(f"⚠️ Não foi possível baixar '{nome_arq}' (Status {resp_file.status_code})")
-                                    except Exception as e_dl:
-                                        st.warning(f"⚠️ Erro ao tratar '{nome_arq}': {e_dl}")
-                            
-                                # 2. Gerar Texto Estruturado Multicanal
+                                            os.remove(tmp_path)
+                                    except: pass
+                                
+                                # Adiciona o template selecionado se houver
+                                template_part = None
+                                if template_selecionado != "Nenhum":
+                                    path_tpl = os.path.join("assets", "templates-cards", template_selecionado)
+                                    if os.path.exists(path_tpl):
+                                        template_part = client.files.upload(file=path_tpl)
+
                                 class TextosGerados(BaseModel):
-                                    instagram: Optional[str] = Field(None, description="Texto formatado para Instagram com tom engajador (Máximo 3 emojis). Use parágrafos curtos separados por duas quebras de linha (\\n\\n). Inclua hashtags relacionadas na base.")
-                                    whatsapp: Optional[str] = Field(None, description="Mensagem curta, direta e impactante para WhatsApp (Máximo 3 emojis). Pule linhas (\\n\\n). Use *negrito* nos destaques. OBRIGATÓRIO incluir ao final um Call-To-Action sugerindo: 'Acesse o site do Departamento para saber mais / ler a notícia completa'.")
-                                    email: Optional[str] = Field(None, description="Disparo de e-mail institucional. ZERO EMOJIS. Saudação corporativa initial (ex 'Prezados,'), e encerramento com a Assinatura. O corpo deve ser descritivo com parágrafos BEM SEPARADOS por duas quebras de linha (\\n\\n).")
-                                    linkedin: Optional[str] = Field(None, description="Publicação executiva/acadêmica. ZERO EMOJIS. Destaque marcos de sucesso usando marcadores (bullets). Use quebras de linha (\\n\\n) entre sessões com enfoque profissional, networking e inovação.")
-                                    site: Optional[str] = Field(None, description="Matéria Jornalística COMPLETA para o portal web web. ZERO EMOJIS. O maior texto de todos gerados. Deve possuir Título forte na 1ª linha. Embaixo do título escreva o corpo da notícia com no mínimo 2 a 3 parágrafos bem recheados de contexto e divididos por duas quebras de linha (\\n\\n).")
-                                canais_solicitados = channels_label(sol.get('canais'))
-                                
-                                prompt_texto = f"""
-                                {INSTRUCAO_IDENTIDADE_TEXTO}
-                            
-                                IMPORTANTE: O usuário quer publicar este conteúdo nos seguintes canais: {canais_solicitados}.
-                                
-                                REGRAS DE FORMATAÇÃO ESTRUTURAIS EXPLÍCITAS:
-                                - **QUEBRAS DE LINHA**: É OBRIGATÓRIO o uso sequenciado de duas quebras de linha literais (\\n\\n) em todos os textos para gerar espaçamento/parágrafos de descanso visual, nada de textão sólido.
-                                - **ESCALA DE TAMANHOS**: Garanta que o texto para SITE seja nitidamente o mais longo, rico e informativo, com cara de artigo, enquanto WAHTSAPP seja objetivo e sintético com foco em direcionamento para ler a notícia inteira no Site. O E-mail também deve ser médio-longo para comunicar formalmente.
-                                - **USO RESTRITO DE EMOJIS**: Limite estritamente a NO MÁXIMO 3 emojis por texto (para canais como Instagram e WhatsApp). Canais formais como E-mail, Site e LinkedIn NÃO DEVEM possuir nenhum emoji!
-                            
-                                DEMANDA DO USUÁRIO:
-                                - TIPO: {sol.get('tipo')}
-                                - SOLICITANTE/NOME: {sol.get('solicitante')}
-                                - UNIDADE/ÓRGÃO: {sol.get('unidade')}
-                                - SOLICITANDO COMO: {sol.get('solicitando_como', 'Não especificado')}
-                                - CANAIS ONDE SERÃO PUBLICADOS: {canais_solicitados}
-                                - DESCRIÇÃO: {sol.get('descricao')}
-                                """
-                            
-                                with st.spinner("✍️ Compilando e redigindo formato multicanal...", show_time=True):
-                                    resp_text = client.models.generate_content(
-                                        model="gemini-3.1-flash-lite-preview", 
-                                        contents=anexos_parts + [prompt_texto],
-                                        config=types.GenerateContentConfig(
-                                            response_mime_type="application/json",
-                                            response_schema=TextosGerados,
-                                        ),
-                                    )
-                                    legenda_final = resp_text.text
-                                    
+                                    instagram: Optional[str] = Field(None)
+                                    whatsapp: Optional[str] = Field(None)
+                                    email: Optional[str] = Field(None)
+                                    linkedin: Optional[str] = Field(None)
+                                    site: Optional[str] = Field(None)
+
+                                # 2. Worker Assíncrono com monitoramento de estado interno
+                                async def gerar_proposta_individual_async(id_opcao, p_stat, p_img_placeholder):
                                     try:
-                                        textos_parsed = json.loads(legenda_final)
-                                    except:
-                                        textos_parsed = {"instagram": legenda_final}
-                                
-                                st.write("✅ Textos redigidos com sucesso.")
-                                
-                                st.info("📋 **Copys Automáticos por Canal (Role para Visualizar)**")
-                                if textos_parsed:
-                                    mapping = [
-                                        ("instagram", "📱 Instagram"),
-                                        ("whatsapp", "💬 WhatsApp"),
-                                        ("email", "✉️ E-mail"),
-                                        ("linkedin", "💼 LinkedIn"),
-                                        ("site", "🌐 Site")
-                                    ]
-                                    available_channels = [k for k, _ in mapping if textos_parsed.get(k)]
-                                    labels = [l for k, l in mapping if textos_parsed.get(k)]
-                                    
-                                    if labels:
-                                        tabs = st.tabs(labels)
-                                        for idx, key in enumerate(available_channels):
-                                            with tabs[idx]:
-                                                st.write(textos_parsed[key])
-                            
-                                # Gerar Imagem
-                                image_bytes = None
-                                try:
-                                    ambito_sol = sol.get('solicitando_como', 'Departamento')
-                                    prefixo_template = "departamento"
-                                    if "Colegiado" in ambito_sol: prefixo_template = "colegiado"
-                                    elif "Pós" in ambito_sol: prefixo_template = "pos"
-                                
-                                    path_bg = os.path.join("assets", f"{prefixo_template}-background-template.png")
-                                
-                                    def up_img_safe(p):
-                                        if os.path.exists(p): return client.files.upload(file=p)
-                                        return None
-                                
-                                    file_bg = up_img_safe(path_bg)
-                                
-                                    anexos_imagem = list(anexos_parts)
-                                    if file_bg: anexos_imagem.append(file_bg)
-                                
-                                    prompt_imagem = (
-                                        f"Create an Instagram post image (portrait 4:5 aspect ratio).\n\n"
-                                        f"INSTRUÇÕES DE DESIGN E LIBERDADE CRIATIVA:\n"
-                                        f"1. VOCÊ TEM TOTAL LIBERDADE PARA CRIAR! O design deve ser moderno, chamativo, engajador e muito bonito visualmente.\n"
-                                        f"2. Foi fornecido um 'background-template' apenas como base de cores e texturas. Use a essência desse fundo, mas sinta-se à vontade para inovar, compor elementos em 3D, adicionar grafismos e criar contrastes marcantes no post.\n"
-                                        f"3. SE HOUVER FOTOS de pessoas/rostos nos arquivos fornecidos pelo usuário: O rosto deve permanecer INTACTO. Do NOT alter expressions, DO NOT add smiles or corrections. Copie as feições exatamente como estão na imagem original. Caso a foto seja muito ampla, faça um foco (recorte) no rosto da pessoa destacando-a no centro ou laterais do design.\n\n"
-                                        f"DEMANDA DO USUÁRIO (O que exibir na arte):\n"
-                                        f"TIPO: '{sol.get('tipo', '')}'\n"
-                                        f"SOLICITANDO COMO: '{sol.get('solicitando_como', '')}'\n"
-                                        f"DESCRIÇÃO E TEXTOS: '{sol.get('descricao', '')}'\n"
-                                    )
-                                
-                                    with st.spinner("🎨 Renderizando arte visual (aspect ratio 4:5)...", show_time=True):
-                                        resp_img = client.models.generate_content(
+                                        p_stat.markdown(f"**Opção {id_opcao}**: Iniciando...")
+                                        
+                                        # Geração de Texto
+                                        p_stat.markdown(f"**Opção {id_opcao}**: Gerando texto...")
+                                        prompt_texto = f"""
+                                        {PROMPT_SISTEMA_TEXTO}
+                                        ---
+                                        DEMANDA DO USUÁRIO: {sol.get('descricao')}
+                                        CANAIS SOLICITADOS: {sol.get('canais')}
+                                        INSTRUÇÕES ESPECIAFICAS DESTA SOLICITAÇÃO: {instrucoes_ia}
+                                        """
+                                        
+                                        task_texto = client.aio.models.generate_content(
+                                            model="gemini-3.1-flash-lite-preview", 
+                                            contents=anexos_parts + [prompt_texto],
+                                            config=types.GenerateContentConfig(
+                                                response_mime_type="application/json",
+                                                response_schema=TextosGerados,
+                                            ),
+                                        )
+                                        
+                                        # Geração de Imagem
+                                        p_stat.markdown(f"**Opção {id_opcao}**: Gerando imagem...")
+                                        anexos_img = list(anexos_parts)
+                                        if template_part: 
+                                            anexos_img.append(template_part)
+                                            # Se tem template, reforçamos no prompt
+                                            template_note = "USE O TEMPLATE ANEXADO (Template de Card) COMO BASE DE DESIGN."
+                                        else:
+                                            template_note = ""
+
+                                        prompt_img = f"""
+                                        {PROMPT_SISTEMA_VISUAL}
+                                        ---
+                                        {template_note}
+                                        CONTEÚDO DA IMAGEM BASEADO EM: {sol.get('descricao')}
+                                        NOTAS EXTRAS DO USUÁRIO: {instrucoes_ia}
+                                        FORMATO OBRIGATÓRIO: Post Redes Sociais 4:5.
+                                        """
+                                        
+                                        task_imagem = client.aio.models.generate_content(
                                             model="gemini-3-pro-image-preview",
-                                            contents=anexos_imagem + [prompt_imagem],
+                                            contents=anexos_img + [prompt_img + ' (image output only)'],
                                             config=types.GenerateContentConfig(
                                                 response_modalities=['IMAGE'],
-                                                image_config=types.ImageConfig(aspect_ratio="4:5", image_size="4K")
+                                                image_config=types.ImageConfig(aspect_ratio="4:5")
                                             )
                                         )
+
+                                        resp_text, resp_img = await asyncio.gather(task_texto, task_imagem)
+                                        
+                                        # Processar Imagem
+                                        img_bytes = None
+                                        for part in resp_img.parts:
+                                            if part.inline_data: img_bytes = part.inline_data.data; break
+                                            elif hasattr(part, "as_image"):
+                                                b_arr = io.BytesIO()
+                                                part.as_image().save(b_arr, format='PNG')
+                                                img_bytes = b_arr.getvalue()
+                                                break
+                                        
+                                        if img_bytes:
+                                            p_img_placeholder.image(img_bytes, caption=f"Preview Opção {id_opcao}", use_container_width=True)
+                                        
+                                        p_stat.success(f"Opção {id_opcao}: Pronta!")
+                                        return {"textos": json.loads(resp_text.text), "imagem_bytes": img_bytes, "status": "sucesso"}
+                                    except Exception as e:
+                                        p_stat.error(f"Erro na Opção {id_opcao}: {str(e)}")
+                                        return {"status": "erro", "erro": str(e)}
+
+                                # 3. Execução e Timer em Tempo Real
+                                for p in p_status: p.info("🚀 Iniciando Propostas...")
+                                tasks = [
+                                    asyncio.create_task(gerar_proposta_individual_async(1, p_status[0], p_progress[0])),
+                                    asyncio.create_task(gerar_proposta_individual_async(2, p_status[1], p_progress[1])),
+                                    asyncio.create_task(gerar_proposta_individual_async(3, p_status[2], p_progress[2]))
+                                ]
+
+                                start_time = time.perf_counter()
+                                while any(not t.done() for t in tasks):
+                                    for i, t in enumerate(tasks):
+                                        if not t.done():
+                                            elapsed = time.perf_counter() - start_time
+                                            p_timers[i].markdown(f"⏱️ **{elapsed:.1f}s**")
+                                    await asyncio.sleep(0.1)
+
+                                # Parada final dos timers
+                                for i, t in enumerate(tasks):
+                                    elapsed = time.perf_counter() - start_time
+                                    if t.done():
+                                        p_timers[i].markdown(f"🏁 Finalizado em **{elapsed:.1f}s**")
+
+                                resultados = [await t for t in tasks]
+
+                                # 4. Agrupar Resultados e Persistir
+                                opcoes_sucesso = []
+                                for idx, res in enumerate(resultados):
+                                    if res["status"] == "sucesso":
+                                        img_url = None
+                                        if res["imagem_bytes"]:
+                                            nome_f = f"ia_op_{sol['id']}_{int(time.time())}_{idx}.png"
+                                            img_url = upload_to_storage(res["imagem_bytes"], nome_f, "image/png")
+                                        
+                                        opcoes_sucesso.append({
+                                            "legenda": json.dumps(res["textos"]),
+                                            "imagem_url": img_url,
+                                            "id_opcao": idx + 1
+                                        })
                                 
-                                    for part in resp_img.parts:
-                                        if part.inline_data: image_bytes = part.inline_data.data; break
-                                        elif hasattr(part, "as_image"):
-                                            img_o = part.as_image()
-                                            b_arr = io.BytesIO()
-                                            img_o.save(b_arr, format='PNG')
-                                            image_bytes = b_arr.getvalue()
-                                            break
-                                
-                                    if image_bytes: 
-                                        st.write("✅ Arte visual concluída.")
-                                        st.image(image_bytes, caption="Prévia da Arte Gerada", width=300)
-                                    else: 
-                                        st.write("ℹ️ Apenas os textos da proposta puderam ser renderizados.")
-                                except Exception as e_img:
-                                    st.warning(f"Não foi possível gerar a arte visual: {e_img}")
-                                    
-                                # 3. Salvar resultados permanentemente no Banco de Dados
-                                image_url = None
-                                if image_bytes:
-                                    st.write("☁️ Salvando arte no banco de dados...")
-                                    nome_img = f"ia_gen_{sol['id']}_{int(time.time())}.png"
-                                    image_url = upload_to_storage(image_bytes, nome_img, "image/png")
-                            
-                                tempo_total = round(time.time() - tempo_inicio, 1)
-                            
-                                # Preparar dicionário de dados da tentativa
-                                nova_tent = {
-                                    "legenda": legenda_final,
-                                    "imagem_url": image_url,
-                                    "prompt_texto": prompt_texto,
-                                    "prompt_imagem": prompt_imagem,
-                                    "tempo_segundos": tempo_total,
-                                    "data": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                                }
-                                
-                                tentativas_atuais = sol.get("tentativas_ia", [])
-                                lista_tents = []
-                                for t in tentativas_atuais:
-                                    if isinstance(t, dict):
-                                        lista_tents.append(t)
-                                    elif isinstance(t, str):
-                                        try: lista_tents.append(json.loads(t))
-                                        except: pass
-                                
-                                lista_tents.append(nova_tent)
-                                
-                                if atualizar_tentativas_ia(sol['id'], lista_tents):
-                                    status_ia.update(label="✨ Rascunho finalizado e salvo no histórico! Atualizando...", state="complete")
-                                    time.sleep(1.5)
+                                if opcoes_sucesso:
+                                    tentativas_atuais = sol.get("tentativas_ia", [])
+                                    tentativas_atuais.append({
+                                        "data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                                        "opcoes": opcoes_sucesso,
+                                        "instrucoes_usadas": instrucoes_ia
+                                    })
+                                    atualizar_tentativas_ia(sol['id'], tentativas_atuais)
+                                    st.toast("✅ Propostas salvas no histórico!", icon="🎉")
+                                    time.sleep(1) # Delay curto para o usuário ver o "Concluído" nas colunas
                                     st.rerun()
-                                else:
-                                    status_ia.update(label="⚠️ Rascunho gerado, mas erro ao salvar histórico.", state="error")
-                                    
-                            except Exception as e:
-                                st.error(f"Erro inesperado no processamento de IA: {e}")
-                                status_ia.update(label="❌ Erro no processamento", state="error")
+
+                            except Exception as e_geral:
+                                st.error(f"Erro Crítico: {e_geral}")
+
+                        asyncio.run(perform_generation())
 
             # Exibição do Histórico de Tentativas da IA
             tentativas_ia_banco = sol.get("tentativas_ia", [])
@@ -1251,70 +1229,80 @@ def page_dashboard_solicitacoes():
                 
                 for idx, t in enumerate(reversed(lista_tents)):
                     num = len(lista_tents) - idx
-                    # Expande apenas a tentativa mais recente (que agora é o índice 0)
-                    with st.expander(f"Tentativa {num}", expanded=(idx == 0)):
-                        c1, c2 = st.columns([1, 1.2])
-                        with c1:
-                            if t.get("imagem_url"):
-                                st.image(t["imagem_url"], caption=f"Arte Gerada (Tentativa {num})", use_container_width=True)
-                                st.markdown(f"📥 [Baixar Arte Original]({t['imagem_url']})")
-                            else:
-                                st.info("Arte visual não foi gerada ou salva.")
-                        with c2:
-                            st.markdown("**Textos Copys Gerados (Pronto para Uso):**")
-                            # Renderiza textos estruturados multicanais ou legado plano
-                            try:
-                                textos_hist = json.loads(t.get("legenda", ""))
-                                if isinstance(textos_hist, dict):
-                                    mapping = [
-                                        ("instagram", "📱 Instagram"),
-                                        ("whatsapp", "💬 WhatsApp"),
-                                        ("email", "✉️ E-mail"),
-                                        ("linkedin", "\U0001F4BC LinkedIn"),
-                                        ("site", "🌐 Site")
-                                    ]
-                                    available_channels = [k for k, _ in mapping if textos_hist.get(k)]
-                                    labels = [l for k, l in mapping if textos_hist.get(k)]
-                                    
-                                    if labels:
-                                        tabs = st.tabs(labels)
-                                        for idx, key in enumerate(available_channels):
-                                            with tabs[idx]:
-                                                st.text_area("Cópia", value=textos_hist[key], height=250, key=f"hs_{key}_{sol['id']}_{num}", label_visibility="collapsed")
-                                                if key == "site":
-                                                    st.markdown("---")
-                                                    if st.button("🌐 Adicionar ao site", key=f"btn_add_site_{sol['id']}_{num}"):
-                                                        linhas = textos_hist[key].strip().split('\n')
-                                                        titulo = next((l for l in linhas if l.strip()), "Notícia do Departamento")
-                                                        titulo = titulo.replace('*', '').replace('#', '').strip()
-                                                        
-                                                        doc_data = {
-                                                            "titulo": titulo,
-                                                            "conteudo": textos_hist[key],
-                                                            "autor": "Departamento de Estatística - IME/UFBA",
-                                                            "data": datetime.utcnow(),
-                                                            "tipo": "noticia"
-                                                        }
-                                                        if t.get("imagem_url"):
-                                                            doc_data["imagem_url"] = t["imagem_url"]
-                                                            
-                                                        sucesso, msg = adicionar_documento("conteudos", doc_data)
-                                                        if sucesso:
-                                                            st.success("✅ Notícia publicada no site com sucesso!")
-                                                        else:
-                                                            st.error(f"⚠️ Erro ao publicar: {msg}")
-                                else:
-                                    raise ValueError("Not a dict")
-                            except:
-                                # Caso antigo ou mal formatado
-                                st.text_area(
-                                    "Texto legado gerado:", 
-                                    value=t.get("legenda", ""), 
-                                    height=350, 
-                                    key=f"hist_legenda_v1_{sol['id']}_{num}", 
-                                    label_visibility="collapsed"
-                                )
-                            # Detalhes técnicos ocultos conforme nova UI
+                    label_tent = f"Tentativa {num} • {t.get('data', '')}"
+                    with st.expander(label_tent, expanded=(idx == 0)):
+                        # Se for o novo formato com múltiplas opções
+                        if "opcoes" in t and isinstance(t["opcoes"], list):
+                            if t.get("instrucoes_usadas"):
+                                st.caption(f"📝 **Instruções extras:** {t['instrucoes_usadas']}")
+                            
+                            # Pré-processamento das opções e canais
+                            op_texts = []
+                            for op in t["opcoes"]:
+                                try: op_texts.append(json.loads(op.get("legenda", "{}")))
+                                except: op_texts.append({})
+
+                            mapping = [
+                                ("instagram", "📱 Instagram"), ("whatsapp", "💬 WhatsApp"),
+                                ("email", "✉️ E-mail"), ("linkedin", "💼 LinkedIn"), ("site", "🌐 Site")
+                            ]
+                            
+                            available_channels = [m for m in mapping if any(txts.get(m[0]) for txts in op_texts)]
+
+                            # 1. Primeiro as Abas de Canal (exibindo as 3 opções dentro de cada uma)
+                            if available_channels:
+                                st.markdown("#### 📄 Conteúdos propostos por Canal")
+                                chan_tabs = st.tabs([l for k, l in available_channels])
+                                
+                                for chan_idx, (key, label) in enumerate(available_channels):
+                                    with chan_tabs[chan_idx]:
+                                        txt_cols = st.columns(len(t["opcoes"]))
+                                        for op_idx, op in enumerate(t["opcoes"]):
+                                            with txt_cols[op_idx]:
+                                                val = op_texts[op_idx].get(key, "")
+                                                if val:
+                                                    st.markdown(f"**Opção {op.get('id_opcao', op_idx+1)}**")
+                                                    st.text_area("Texto", value=val, height=250, key=f"txt_his_{num}_{op_idx}_{key}", label_visibility="collapsed")
+                                                    
+                                                    if key == "site":
+                                                        if st.button("🌐 Publicar", key=f"pub_his_{num}_{op_idx}_{num}"):
+                                                            linhas = val.strip().split('\n')
+                                                            titulo = next((l for l in linhas if l.strip()), "Notícia do Departamento")
+                                                            titulo = titulo.replace('*', '').replace('#', '').strip()
+                                                            doc_site = {
+                                                                "titulo": titulo, "conteudo": val,
+                                                                "autor": "Comunicação IME", "data": datetime.utcnow(),
+                                                                "tipo": "noticia", "imagem_url": op.get("imagem_url")
+                                                            }
+                                                            s, m = adicionar_documento("conteudos", doc_site)
+                                                            if s: st.success("Postado!")
+                                                            else: st.error(m)
+                                                else:
+                                                    st.caption(f"Sem proposta para {label} na Opção {op_idx+1}")
+
+                            # 2. Depois as Imagens em 3 Colunas na base
+                            st.markdown("#### 🎨 Artes visuais")
+                            cols_imgs = st.columns(len(t["opcoes"]))
+                            for i, op in enumerate(t["opcoes"]):
+                                with cols_imgs[i]:
+                                    st.markdown(f"**Opção {op.get('id_opcao', i+1)}**")
+                                    if op.get("imagem_url"):
+                                        st.image(op["imagem_url"], use_container_width=True)
+                                    else:
+                                        st.info("Sem imagem.")
+
+                        else:
+                            # Formato Legado (Singular)
+                            c1, c2 = st.columns([1, 1.2])
+                            with c1:
+                                if t.get("imagem_url"):
+                                    st.image(t["imagem_url"], use_container_width=True)
+                            with c2:
+                                try:
+                                    textos = json.loads(t.get("legenda", "{}"))
+                                    st.json(textos) # Simplificado para legado
+                                except:
+                                    st.text_area("Legenda", t.get("legenda", ""), height=200)
     render_persistent_footer()
 
 def page_adicionar_noticia():
