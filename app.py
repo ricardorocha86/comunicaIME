@@ -40,6 +40,8 @@ EMAIL_NOTIFIER = EmailNotifier(CONFIG)
 GEMINI_API_KEY_SECRET = CONFIG.gemini_api_key
 
 COORDENADOR_PROJETO_EMAIL = "ricardo8610@gmail.com"
+ADMIN_EMAILS = ["ricardo8610@gmail.com"]
+ESTAGIARIOS_EMAILS = ["estagiariosime@gmail.com"]
 RESPONSAVEL_NEX_NAO_DEFINIDO = "N\u00e3o definido ainda"
 RESPONSAVEIS_NEX_OPCOES = [
     "NEX (sem estagi\u00e1ria definida)",
@@ -116,8 +118,8 @@ def email_contato_valido(email: str) -> bool:
 
 
 def formatar_data_para_email(data_val) -> str:
-    if not data_val:
-        return "N\u00e3o informado"
+    if pd.isna(data_val) or not data_val:
+        return "Não informado"
     if isinstance(data_val, datetime):
         return data_val.strftime("%d/%m/%Y %H:%M")
     return str(data_val)
@@ -134,7 +136,20 @@ def montar_links_markdown(urls: list[str] | None) -> str:
     links = [u.strip() for u in (urls or []) if isinstance(u, str) and u.strip()]
     if not links:
         return "Sem anexos."
-    return "\n".join(f"- [Anexo {idx}]({url})" for idx, url in enumerate(links, start=1))
+    
+    items = []
+    for idx, url in enumerate(links, start=1):
+        # Tentar extrair a extensão do arquivo na URL
+        try:
+            path = url.split('?')[0]  # Remove tokens/parâmetros do Firebase
+            ext = path.split('.')[-1].upper()
+            if len(ext) > 5 or '/' in ext: # Sanitização básica
+                ext = "ARQUIVO"
+            items.append(f"- [Anexo {idx} - {ext}]({url})")
+        except:
+            items.append(f"- [Anexo {idx}]({url})")
+            
+    return "\n".join(items)
 
 
 def enviar_email_personalizado(
@@ -169,12 +184,14 @@ def enviar_email_personalizado(
 
 
 def notificar_inicio_producao(solicitacao: dict, responsavel_nex: str) -> list[str]:
+    # Para eventos, o campo é tipo_evento, para criativos é tipo
+    tipo_demanda = solicitacao.get('tipo') or solicitacao.get('tipo_evento') or 'Não informado'
     detalhes = (
         "Atualizacao de status da solicitacao\n"
         f"- Novo status: {STATUS_EM_PRODUCAO_ARTES}\n"
         f"- Responsavel NEX: {responsavel_nex}\n"
-        f"- Tipo da demanda: {solicitacao.get('tipo', 'Nao informado')}\n"
-        f"- Solicitante: {solicitacao.get('solicitante', 'Nao informado')}\n"
+        f"- Tipo da demanda: {tipo_demanda}\n"
+        f"- Solicitante: {solicitacao.get('solicitante', 'Não informado')}\n"
     )
     erros = []
     erros.extend(
@@ -371,16 +388,6 @@ def render_persistent_footer():
 
 
 def page_solicitar_publicacao():
-    render_header_banner()
-    st.markdown(
-        """
-    **Bem-vindo à Central de Solicitações de Divulgação.**
-    Este canal centraliza as demandas de comunicação do IME e mantém o pedido,
-    os anexos e os canais de publicação organizados em um só fluxo.
-    """
-    )
-    st.divider()
-
     unidade_options = ["DEST", "DMAT", "IME", "NEX"]
 
     st.markdown("### 🎨 Solicitação de Criativos e Divulgação")
@@ -391,34 +398,25 @@ def page_solicitar_publicacao():
         selection_mode="single",
         default=DEFAULT_UNIDADE,
         width="stretch",
+        key="criativos_unidade_pills",
     )
     
-    # Lógica de exibição e seleção
-    lista_solicitantes = ["Selecione uma unidade primeiro"]
-    opcoes_solicitando = ["Selecione uma unidade primeiro"]
-
-    if unidade == "DEST":
-        lista_solicitantes = sorted(DOCENTES_DEST)
-        opcoes_solicitando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
-    elif unidade == "DMAT":
-        lista_solicitantes = sorted(DOCENTES_DMAT)
-        opcoes_solicitando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
+    # Lógica de opções por unidade
+    opcoes_solicitando = []
+    if unidade in ("DEST", "DMAT"):
+        opcoes_solicitando = ["Docente", "Colegiado", "Departamento", "Pós-graduação"]
     elif unidade == "IME":
-        lista_solicitantes = sorted(["Ricardo Rocha", "Giovana Silva", "Cristina", "Kleyber"])
-        opcoes_solicitando = ["Direção do Instituto", "CEAPG", "CEAD", "CEAG", "Secretaria Executiva", "Outro"]
+        opcoes_solicitando = ["Diretor", "Coordenador", "Docente"]
     elif unidade == "NEX":
-        lista_solicitantes = sorted(["Giovana Silva", "Cristina"])
-        opcoes_solicitando = ["Coordenador do NEX", "Membro da Equipe", "Outro"]
+        opcoes_solicitando = ["Docente", "Coordenador", "Estagiário"]
 
     colA, colB, colC = st.columns(3)
     with colA:
-        solicitante = st.selectbox(
+        solicitante = st.text_input(
             "Solicitante",
-            lista_solicitantes,
-            index=None,
-            placeholder="Selecione o nome...",
+            placeholder="Digite o nome do solicitante...",
             disabled=not bool(unidade),
-        )
+        ).strip()
     with colB:
         solicitando_como = st.selectbox(
             "Solicitando como:",
@@ -434,10 +432,29 @@ def page_solicitar_publicacao():
             help="Este e-mail receberá a confirmação da solicitação e será usado para contato sobre a demanda.",
         ).strip()
     
-    lista_demandas = DEMAND_TYPES.get(solicitando_como, ["Selecione primeiro quem está solicitando..."]) if solicitando_como else ["Aguardando definir 'Solicitando como'"]
+    TIPOS_SOLICITACAO = [
+        "Divulgação de evento",
+        "Divulgação de edital ou seleção",
+        "Divulgação de defesa (TCC, Mestrado, Doutorado)",
+        "Divulgação de curso ou oficina",
+        "Comunicado institucional",
+        "Campanha ou ação de engajamento",
+        "Produção de banner ou cartaz",
+        "Newsletter ou e-mail marketing",
+        "Atualização de conteúdo no site",
+        "Divulgação de conquista ou resultado",
+        "Convite digital ou folder",
+        "Criação de identidade visual básica",
+        "Outro",
+    ]
     col_tipo, col_data = st.columns(2)
     with col_tipo:
-        tipo_demanda = st.selectbox("Tipo de Solicitação", lista_demandas, disabled=(not solicitando_como))
+        tipo_demanda = st.selectbox(
+            "Tipo de Solicitação",
+            TIPOS_SOLICITACAO,
+            index=None,
+            placeholder="Selecione o tipo...",
+        )
     with col_data:
         # Validação de Data de Publicação (Mínimo 24h, Urgência < 48h)
         default_date = (datetime.now() + timedelta(days=7)).replace(minute=0, second=0, microsecond=0)
@@ -464,21 +481,35 @@ def page_solicitar_publicacao():
     canais = st.segmented_control(
         "Canais de Divulgação",
         CHANNEL_OPTIONS,
+        default=["Instagram"],
         selection_mode="multi",
         width="stretch",
+        key="criativos_canais_segmented",
     )
 
     st.markdown("### 📎 Detalhes da Solicitação")
-    st.caption("Utilize o campo abaixo para descrever o conteúdo e anexar materiais.")
+    st.caption("Utilize o campo abaixo para descrever o conteúdo e anexar materiais. Depois, confirme o envio no botão abaixo.")
+
+    # CSS para aumentar a altura do campo de texto do chat_input
+    st.markdown(
+        """
+        <style>
+        [data-testid="stChatInput"] textarea {
+            min-height: 120px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     email_valido = email_contato_valido(email_contato)
     formulario_pronto = bool(
         unidade and solicitante and solicitando_como and email_valido and data_valida
     )
     chat_placeholder = (
-        "⚠️ Preencha Unidade, Solicitante, Solicitando como, E-mail válido e Data/Hora válida para liberar o envio."
+        "⚠️ Preencha Unidade, Solicitante, Solicitando como, E-mail válido e Data/Hora válida para liberar o campo."
         if not formulario_pronto
-        else "Descreva detalhadamente a sua solicitação (fornecendo URLs, horários, locais, objetivos e público-alvo pretendido). Utilize o ícone de anexo lateral para incluir materiais adicionais (arquivos PDF, cartazes, imagens ou áudios). Após o preenchimento, confirme o envio nesta barra para finalizar o registro."
+        else "Descreva detalhadamente a sua solicitação (URLs, horários, locais, objetivos, público-alvo). Use o ícone de anexo para incluir arquivos."
     )
 
     with st.container():
@@ -488,106 +519,127 @@ def page_solicitar_publicacao():
             disabled=not formulario_pronto,
         )
 
-    pode_enviar = bool(formulario_pronto and solicitacao_input)
-    if pode_enviar:
-        erros_validacao = []
-        if not unidade:
-            erros_validacao.append("Selecione a unidade.")
-        if not solicitante:
-            erros_validacao.append("Selecione o solicitante.")
-        if not solicitando_como:
-            erros_validacao.append("Selecione o campo 'Solicitando como'.")
-        if not email_valido:
-            erros_validacao.append("Informe um e-mail de contato válido.")
-        if not data_valida:
-            erros_validacao.append("Ajuste a data/hora de publicação para um prazo mínimo de 24 horas.")
+    # Armazena rascunho no session_state ao enviar pelo chat_input
+    if solicitacao_input:
+        st.session_state["rascunho_solicitacao"] = {
+            "texto": solicitacao_input.text or "",
+            "arquivos": solicitacao_input.files or [],
+        }
 
-        if erros_validacao:
-            for erro in erros_validacao:
-                st.error(f"⚠️ {erro}")
-            render_persistent_footer()
-            return
+    rascunho = st.session_state.get("rascunho_solicitacao")
+    if rascunho:
+        with st.container(border=True):
+            st.markdown("#### 📋 Resumo da Solicitação")
+            col_prev1, col_prev2 = st.columns([2, 1])
+            with col_prev1:
+                st.markdown("**Descrição:**")
+                st.text(rascunho["texto"] if rascunho["texto"] else "Sem descrição.")
+            with col_prev2:
+                st.markdown(f"**Unidade:** {unidade or '-'}")
+                st.markdown(f"**Solicitante:** {solicitante or '-'}")
+                st.markdown(f"**Tipo:** {tipo_demanda or '-'}")
+                n_anexos = len(rascunho.get("arquivos") or [])
+                st.markdown(f"**Anexos:** {n_anexos} arquivo(s)")
+            st.caption("Para alterar a descrição ou os anexos, envie novamente pelo campo acima.")
 
-        with st.status("🚀 Registrando sua solicitação e subindo anexos...", expanded=True) as status:
-            descricao_final = solicitacao_input.text or ""
-            arquivos = solicitacao_input.files or []
-            
-            links_final = []
-            
-            # Processamento de Arquivos Selecionados
-            for f in arquivos:
-                status.write(f"📤 Subindo arquivo: {f.name}...")
-                url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
-                if url_storage:
-                    links_final.append(url_storage)
-            
-            # Persistência no Firestore
-            dados_solicitacao = {
-                "unidade": unidade,
-                "solicitante": solicitante,
-                "email": email_contato,
-                "solicitando_como": solicitando_como,
-                "tipo": tipo_demanda,
-                "data_publicacao": data_pub, # Agora enviando como objeto datetime (Timestamp no Firestore)
-                "canais": canais,
-                "descricao": descricao_final,
-                "anexos": links_final,
-                "data_solicitacao": datetime.now(), # Agora como datetime.now() local para bater com data_pub
-                "status": STATUS_PENDENTE,
-                "responsavel_nex": RESPONSAVEL_NEX_NAO_DEFINIDO,
-                "urgencia": urgencia
-            }
-            
-            sucesso, msg_erro = adicionar_documento("solicitacoes", dados_solicitacao)
-            if sucesso:
-                payload_email = SubmissionEmailPayload(
-                    solicitante=solicitante,
-                    email=email_contato,
-                    unidade=unidade,
-                    solicitando_como=solicitando_como,
-                    tipo=tipo_demanda,
-                    canais=canais,
-                    descricao=build_email_template_criativos(
-                        tipo_demanda=tipo_demanda,
+        pode_submeter = formulario_pronto and tipo_demanda
+        enviar_confirmado = st.button(
+            "🚀 Confirmar e Submeter Solicitação",
+            type="primary",
+            use_container_width=True,
+            disabled=not pode_submeter,
+        )
+
+        if enviar_confirmado:
+            erros_validacao = []
+            if not unidade:
+                erros_validacao.append("Selecione a unidade.")
+            if not solicitante:
+                erros_validacao.append("Informe o nome do solicitante.")
+            if not solicitando_como:
+                erros_validacao.append("Selecione o campo 'Solicitando como'.")
+            if not email_valido:
+                erros_validacao.append("Informe um e-mail de contato válido.")
+            if not data_valida:
+                erros_validacao.append("Ajuste a data/hora de publicação para um prazo mínimo de 24 horas.")
+            if not tipo_demanda:
+                erros_validacao.append("Selecione o tipo de solicitação.")
+
+            if erros_validacao:
+                for erro in erros_validacao:
+                    st.error(f"⚠️ {erro}")
+                render_persistent_footer()
+                return
+
+            with st.status("\U0001F680 Registrando sua solicita\u00e7\u00e3o e subindo anexos...", expanded=True) as status:
+                descricao_final = rascunho["texto"]
+                arquivos = rascunho.get("arquivos") or []
+                
+                links_final = []
+                
+                # Processamento de Arquivos Selecionados
+                for f in arquivos:
+                    status.write(f"\U0001F4E4 Subindo arquivo: {f.name}...")
+                    url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
+                    if url_storage:
+                        links_final.append(url_storage)
+                
+                # Persistência no Firestore
+                dados_solicitacao = {
+                    "unidade": unidade,
+                    "solicitante": solicitante,
+                    "email": email_contato,
+                    "solicitando_como": solicitando_como,
+                    "tipo": tipo_demanda,
+                    "data_publicacao": data_pub,
+                    "canais": canais,
+                    "descricao": descricao_final,
+                    "anexos": links_final,
+                    "data_solicitacao": datetime.now(),
+                    "status": STATUS_PENDENTE,
+                    "responsavel_nex": RESPONSAVEL_NEX_NAO_DEFINIDO,
+                    "urgencia": urgencia
+                }
+                
+                sucesso, msg_erro = adicionar_documento("solicitacoes", dados_solicitacao)
+                if sucesso:
+                    status.write("📧 Enviando notificações por e-mail...")
+                    payload_email = SubmissionEmailPayload(
+                        solicitante=solicitante,
+                        email=email_contato,
+                        unidade=unidade,
+                        solicitando_como=solicitando_como,
+                        tipo=tipo_demanda,
                         canais=canais,
-                        data_publicacao=data_pub,
                         descricao=descricao_final,
+                        data_publicacao=data_pub.strftime("%d/%m/%Y %H:%M"),
                         urgencia=urgencia,
-                    ),
-                    data_publicacao=data_pub.strftime("%d/%m/%Y %H:%M"),
-                    urgencia=urgencia,
-                )
-                erros_email = EMAIL_NOTIFIER.send_submission_notifications(payload_email)
-                st.session_state.pedido_tmp = None  # Limpa do estado o rascunho temporario
-                status.update(label="✅ Solicitação registrada com sucesso!", state="complete", expanded=False)
-                st.balloons()
-                msg_urg = " (Tratada como URGENTE)" if urgencia else ""
-                nome_exibicao = solicitante.split(" ")[0]
-                st.success(f"💻 Tudo pronto, {nome_exibicao}! Sua demanda{msg_urg} foi enviada.")
-                if erros_email:
-                    for erro_email in erros_email:
-                        st.warning(erro_email)
-                time.sleep(2.5)
-                st.rerun()
-            else:
-                status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+                    )
+                    
+                    # Definimos os destinatários (Admin + Estagiários) como BCC (além do To: solicitante)
+                    CONFIG.email_bcc = list(set(ADMIN_EMAILS + ESTAGIARIOS_EMAILS))
+                    
+                    erros_email = EMAIL_NOTIFIER.send_submission_notifications(payload_email)
+                    st.session_state.pop("rascunho_solicitacao", None)
+                    status.update(label="\u2705 Solicita\u00e7\u00e3o registrada com sucesso!", state="complete", expanded=False)
+                    st.balloons()
+                    msg_urg = " (Tratada como URGENTE)" if urgencia else ""
+                    nome_exibicao = solicitante.split(" ")[0] if solicitante else "Solicitante"
+                    st.success(f"\U0001F4BB Tudo pronto, {nome_exibicao}! Sua demanda{msg_urg} foi enviada.")
+                    if erros_email:
+                        for erro_email in erros_email:
+                            st.warning(erro_email)
+                    time.sleep(2.5)
+                    st.rerun()
+                else:
+                    status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
     render_persistent_footer()
 
 
 def page_solicitar_apoio_eventos_transmissoes():
-    render_header_banner()
-    st.markdown(
-        """
-    **Central de Solicitações de Apoio a Eventos e Transmissões.**
-    Este formulário organiza pedidos de apoio operacional para eventos acadêmicos,
-    institucionais e transmissões, com anexos e detalhes em um único fluxo.
-    """
-    )
-    st.divider()
-
     unidade_options = ["DEST", "DMAT", "IME", "NEX"]
 
-    st.markdown("### 🎥 Solicitação de Apoio Técnico a Eventos e Transmissões")
+    st.markdown("### \U0001F3A5 Solicita\u00e7\u00e3o de Apoio T\u00e9cnico a Eventos e Transmiss\u00f5es")
 
     unidade = st.pills(
         "Unidade",
@@ -595,9 +647,10 @@ def page_solicitar_apoio_eventos_transmissoes():
         selection_mode="single",
         default=DEFAULT_UNIDADE if DEFAULT_UNIDADE in unidade_options else "DEST",
         width="stretch",
+        key="eventos_unidade_pills",
     )
 
-    opcoes_local_evento = ["Auditório Maria Zezé", "Sala 148", "Auditório do PAF", "Outro"]
+    opcoes_local_evento = ["Auditório Maria Zezé", "Sala 148", "Auditório do PAF", "Lab 143", "Outro"]
     if hasattr(st, "pills"):
         local_evento = st.pills(
             "Local do evento",
@@ -615,32 +668,23 @@ def page_solicitar_apoio_eventos_transmissoes():
             key="evento_local_fallback",
         )
 
-    lista_solicitantes = ["Selecione uma unidade primeiro"]
-    opcoes_solicitando = ["Selecione uma unidade primeiro"]
-
-    if unidade == "DEST":
-        lista_solicitantes = sorted(DOCENTES_DEST)
-        opcoes_solicitando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
-    elif unidade == "DMAT":
-        lista_solicitantes = sorted(DOCENTES_DMAT)
-        opcoes_solicitando = ["Docente", "Chefe de Departamento", "Colegiado", "Representante do Núcleo de Extensão", "Coordenador de Laboratório", "Outro"]
+    # Lógica de opções por unidade (mesmo padrão de Criativos)
+    opcoes_solicitando = []
+    if unidade in ("DEST", "DMAT"):
+        opcoes_solicitando = ["Docente", "Colegiado", "Departamento", "Pós-graduação"]
     elif unidade == "IME":
-        lista_solicitantes = sorted(["Ricardo Rocha", "Giovana Silva", "Cristina", "Kleyber"])
-        opcoes_solicitando = ["Direção do Instituto", "CEAPG", "CEAD", "CEAG", "Secretaria Executiva", "Outro"]
+        opcoes_solicitando = ["Diretor", "Coordenador", "Docente"]
     elif unidade == "NEX":
-        lista_solicitantes = sorted(["Giovana Silva", "Cristina"])
-        opcoes_solicitando = ["Coordenador do NEX", "Membro da Equipe", "Outro"]
+        opcoes_solicitando = ["Docente", "Coordenador", "Estagiário"]
 
     colA, colB, colC = st.columns(3)
     with colA:
-        solicitante = st.selectbox(
+        solicitante = st.text_input(
             "Solicitante",
-            lista_solicitantes,
-            index=None,
-            placeholder="Selecione o nome...",
+            placeholder="Digite o nome do solicitante...",
             disabled=not bool(unidade),
             key="evento_solicitante",
-        )
+        ).strip()
     with colB:
         solicitando_como = st.selectbox(
             "Solicitando como:",
@@ -668,7 +712,6 @@ def page_solicitar_apoio_eventos_transmissoes():
         "Aula Magna",
         "Evento Institucional",
         "Live / Webinário",
-        "Cobertura Audiovisual",
         "Transmissão ao Vivo",
         "Outro",
     ]
@@ -752,7 +795,19 @@ def page_solicitar_apoio_eventos_transmissoes():
         apoios_necessarios = []
 
     st.markdown("### 📎 Detalhes da Solicitação")
-    st.caption("Utilize o campo abaixo para descrever o evento/transmissão e anexar materiais.")
+    st.caption("Utilize o campo abaixo para descrever o evento/transmissão e anexar materiais. Depois, confirme o envio no botão abaixo.")
+
+    # CSS para aumentar a altura do campo de texto do chat_input
+    st.markdown(
+        """
+        <style>
+        [data-testid="stChatInput"] textarea {
+            min-height: 120px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     email_valido = email_contato_valido(email_contato)
     formulario_pronto = bool(
@@ -760,9 +815,9 @@ def page_solicitar_apoio_eventos_transmissoes():
     )
 
     chat_placeholder = (
-        "⚠️ Preencha Unidade, Local do evento, Solicitante, Solicitando como, Tipo de Evento, E-mail válido e Período válido para liberar o envio."
+        "⚠️ Preencha Unidade, Local do evento, Solicitante, Solicitando como, Tipo de Evento, E-mail válido e Período válido para liberar o campo."
         if not formulario_pronto
-        else "Descreva detalhadamente a solicitação (objetivo, local/plataforma, público estimado, necessidades técnicas, links e responsáveis). Utilize o ícone de anexo lateral para incluir materiais."
+        else "Descreva detalhadamente a solicitação (objetivo, local/plataforma, público estimado, necessidades técnicas, links e responsáveis). Use o ícone de anexo para incluir arquivos."
     )
 
     with st.container():
@@ -773,71 +828,121 @@ def page_solicitar_apoio_eventos_transmissoes():
             key="chat_input_eventos",
         )
 
-    pode_enviar = bool(formulario_pronto and solicitacao_input)
-    if pode_enviar:
-        with st.status("🚀 Registrando sua solicitação e subindo anexos...", expanded=True) as status:
-            descricao_final = solicitacao_input.text or ""
-            arquivos = solicitacao_input.files or []
-            links_final = []
+    # Armazena rascunho no session_state ao enviar pelo chat_input
+    if solicitacao_input:
+        st.session_state["rascunho_eventos"] = {
+            "texto": solicitacao_input.text or "",
+            "arquivos": solicitacao_input.files or [],
+        }
 
-            for f in arquivos:
-                status.write(f"📤 Subindo arquivo: {f.name}...")
-                url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
-                if url_storage:
-                    links_final.append(url_storage)
+    rascunho = st.session_state.get("rascunho_eventos")
+    if rascunho:
+        with st.container(border=True):
+            st.markdown("#### 📋 Resumo da Solicitação de Apoio Técnico")
+            col_prev1, col_prev2 = st.columns([2, 1])
+            with col_prev1:
+                st.markdown("**Descrição:**")
+                st.text(rascunho["texto"] if rascunho["texto"] else "Sem descrição.")
+            with col_prev2:
+                st.markdown(f"**Unidade:** {unidade or '-'}")
+                st.markdown(f"**Local:** {local_evento or '-'}")
+                st.markdown(f"**Tipo:** {tipo_evento or '-'}")
+                n_anexos = len(rascunho.get("arquivos") or [])
+                st.markdown(f"**Anexos:** {n_anexos} arquivo(s)")
+            st.caption("Para alterar a descrição ou os anexos, envie novamente pelo campo acima.")
 
-            dados_solicitacao = {
-                "unidade": unidade,
-                "local_evento": local_evento,
-                "solicitante": solicitante,
-                "email": email_contato,
-                "solicitando_como": solicitando_como,
-                "tipo_evento": tipo_evento,
-                "periodo_inicio": periodo_inicio,
-                "periodo_fim": periodo_fim,
-                "apoios_necessarios": apoios_necessarios,
-                "descricao": descricao_final,
-                "anexos": links_final,
-                "data_solicitacao": datetime.now(),
-                "status": STATUS_PENDENTE,
-                "urgencia": urgencia,
-            }
+        pode_submeter = formulario_pronto and tipo_evento
+        enviar_confirmado = st.button(
+            "🚀 Confirmar e Submeter Solicitação Técnica",
+            type="primary",
+            use_container_width=True,
+            disabled=not pode_submeter,
+            key="btn_confirmar_eventos"
+        )
 
-            sucesso, msg_erro = adicionar_documento("solicitacoes_eventos_transmissoes", dados_solicitacao)
-            if sucesso:
-                payload_email = SubmissionEmailPayload(
-                    solicitante=solicitante,
-                    email=email_contato,
-                    unidade=unidade,
-                    solicitando_como=solicitando_como,
-                    tipo=f"Apoio a Evento/Transmissão: {tipo_evento}",
-                    canais=[],
-                    descricao=build_email_template_apoio_tecnico(
-                        tipo_evento=tipo_evento,
-                        local_evento=local_evento,
-                        periodo_inicio=periodo_inicio,
-                        periodo_fim=periodo_fim,
-                        apoios_necessarios=apoios_necessarios,
+        if enviar_confirmado:
+            erros_validacao = []
+            if not unidade:
+                erros_validacao.append("Selecione a unidade.")
+            if not local_evento:
+                erros_validacao.append("Selecione o local do evento.")
+            if not solicitante:
+                erros_validacao.append("Informe o nome do solicitante.")
+            if not solicitando_como:
+                erros_validacao.append("Selecione o campo 'Solicitando como'.")
+            if not email_valido:
+                erros_validacao.append("Informe um e-mail de contato válido.")
+            if not periodo_valido:
+                erros_validacao.append("Ajuste o período para um prazo mínimo de 24 horas.")
+            if not tipo_evento:
+                erros_validacao.append("Selecione o tipo de evento.")
+
+            if erros_validacao:
+                for erro in erros_validacao:
+                    st.error(f"⚠️ {erro}")
+                render_persistent_footer()
+                return
+
+            with st.status("🚀 Registrando sua solicitação e subindo anexos...", expanded=True) as status:
+                descricao_final = rascunho["texto"]
+                arquivos = rascunho.get("arquivos") or []
+                links_final = []
+
+                for f in arquivos:
+                    status.write(f"📤 Subindo arquivo: {f.name}...")
+                    url_storage = upload_to_storage(f.getvalue(), f.name, f.type)
+                    if url_storage:
+                        links_final.append(url_storage)
+
+                dados_solicitacao = {
+                    "unidade": unidade,
+                    "local_evento": local_evento,
+                    "solicitante": solicitante,
+                    "email": email_contato,
+                    "solicitando_como": solicitando_como,
+                    "tipo_evento": tipo_evento,
+                    "periodo_inicio": periodo_inicio,
+                    "periodo_fim": periodo_fim,
+                    "apoios_necessarios": apoios_necessarios,
+                    "descricao": descricao_final,
+                    "anexos": links_final,
+                    "data_solicitacao": datetime.now(),
+                    "status": STATUS_PENDENTE,
+                    "urgencia": urgencia,
+                }
+
+                sucesso, msg_error = adicionar_documento("solicitacoes_eventos_transmissoes", dados_solicitacao)
+                if sucesso:
+                    status.write("📧 Enviando notificações por e-mail...")
+                    payload_email = SubmissionEmailPayload(
+                        solicitante=solicitante,
+                        email=email_contato,
+                        unidade=unidade,
+                        solicitando_como=solicitando_como,
+                        tipo=f"Apoio a Evento/Transmissão: {tipo_evento}",
+                        canais=[],
                         descricao=descricao_final,
+                        data_publicacao=f"Início: {periodo_inicio.strftime('%d/%m/%Y %H:%M')} | Fim: {periodo_fim.strftime('%d/%m/%Y %H:%M')}",
                         urgencia=urgencia,
-                    ),
-                    data_publicacao=f"Início: {periodo_inicio.strftime('%d/%m/%Y %H:%M')} | Fim: {periodo_fim.strftime('%d/%m/%Y %H:%M')}",
-                    urgencia=urgencia,
-                )
-                erros_email = EMAIL_NOTIFIER.send_submission_notifications(payload_email)
-                st.session_state.pedido_tmp = None
-                status.update(label="✅ Solicitação registrada com sucesso!", state="complete", expanded=False)
-                st.balloons()
-                msg_urg = " (Tratada como URGENTE)" if urgencia else ""
-                nome_exibicao = solicitante.split(" ")[0]
-                st.success(f"💻 Tudo pronto, {nome_exibicao}! Sua demanda{msg_urg} foi enviada.")
-                if erros_email:
-                    for erro_email in erros_email:
-                        st.warning(erro_email)
-                time.sleep(2.5)
-                st.rerun()
-            else:
-                status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_erro}", state="error")
+                    )
+                    
+                    # Destinatários (Admin + Estagiários)
+                    CONFIG.email_bcc = list(set(ADMIN_EMAILS + ESTAGIARIOS_EMAILS))
+                    
+                    erros_email = EMAIL_NOTIFIER.send_submission_notifications(payload_email)
+                    st.session_state.pop("rascunho_eventos", None)
+                    status.update(label="✅ Solicitação registrada com sucesso!", state="complete", expanded=False)
+                    st.balloons()
+                    msg_urg = " (Tratada como URGENTE)" if urgencia else ""
+                    nome_exibicao = solicitante.split(" ")[0] if solicitante else "Solicitante"
+                    st.success(f"💻 Tudo pronto, {nome_exibicao}! Sua demanda{msg_urg} foi enviada.")
+                    if erros_email:
+                        for erro_email in erros_email:
+                            st.warning(erro_email)
+                    time.sleep(2.5)
+                    st.rerun()
+                else:
+                    status.update(label=f"❌ Erro ao salvar no banco de dados: {msg_error}", state="error")
 
     render_persistent_footer()
 
@@ -1315,7 +1420,7 @@ def page_adicionar_noticia():
     
     if st.button("Publicar Notícia"):
         if titulo and conteudo:
-            data_atual = datetime.utcnow()
+            data_atual = datetime.now()
             doc_data = {
                 "titulo": titulo,
                 "conteudo": conteudo,
@@ -1356,7 +1461,7 @@ def page_gerenciar_instrucoes():
                 "titulo": instrucao_titulo,
                 "detalhes": instrucao_detalhes,
                 "prazo": str(prazo),
-                "data_criacao": datetime.utcnow(),
+                "data_criacao": datetime.now(),
                 "tipo": "instrucao"
             }
             adicionar_documento("conteudos", doc_data)
@@ -1455,9 +1560,9 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
         return str(v).strip()
 
     def formatar_data_exibicao(v):
+        if pd.isna(v):
+            return "-"
         if isinstance(v, pd.Timestamp):
-            if pd.isna(v):
-                return "-"
             return v.strftime("%d/%m/%Y - %H:%M")
         if isinstance(v, datetime):
             return v.strftime("%d/%m/%Y - %H:%M")
@@ -1609,9 +1714,19 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
             return None
         return valor_texto(df_table.iloc[idx]["_doc_id"])
 
-    def bloco_acoes_detalhe(collection_name, sol_sel, key_prefix):
-        if collection_name != "solicitacoes":
+    def bloco_acoes_detalhe(collection_name, sol_sel, key_prefix, table_prefix=""):
+        if collection_name not in ["solicitacoes", "solicitacoes_eventos_transmissoes"]:
             return
+
+        def _limpar_selecao():
+            """Limpa session_state de sele\u00e7\u00e3o para evitar inconsist\u00eancia ap\u00f3s mudan\u00e7a de fila."""
+            if not table_prefix:
+                return
+            for k in list(st.session_state.keys()):
+                if k.startswith(table_prefix) and any(
+                    tag in k for tag in ("active_table", "active_doc", "selected_doc")
+                ):
+                    st.session_state.pop(k, None)
 
         doc_id = valor_texto(sol_sel.get("id"))
         if not doc_id:
@@ -1620,22 +1735,27 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
 
         status_atual = sol_sel.get("status", STATUS_PENDENTE)
         status_norm = normalizar_status(status_atual)
+        
+        if status_eh_pendente(status_atual):
+            # Acoes de atribuicao
 
-        if status_norm == normalizar_status(STATUS_PENDENTE):
-            st.markdown("### Definir respons\u00e1vel")
             atual = valor_texto(sol_sel.get("responsavel_nex")) or RESPONSAVEL_NEX_NAO_DEFINIDO
             opcoes = [RESPONSAVEL_NEX_NAO_DEFINIDO] + [r for r in RESPONSAVEIS_NEX_OPCOES if r != RESPONSAVEL_NEX_NAO_DEFINIDO]
             if atual not in opcoes:
                 opcoes.append(atual)
 
             with st.form(key=f"{key_prefix}_form_assumir"):
-                responsavel_novo = st.selectbox(
-                    "Respons\u00e1vel NEX",
-                    opcoes,
-                    index=opcoes.index(atual),
-                    key=f"{key_prefix}_form_nex_select",
-                )
-                confirmou = st.form_submit_button("Confirmar e mover para Em andamento", type="primary")
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    responsavel_novo = st.selectbox(
+                        "Responsável NEX",
+                        opcoes,
+                        index=opcoes.index(atual),
+                        key=f"{key_prefix}_form_nex_select",
+                        label_visibility="collapsed"
+                    )
+                with c2:
+                    confirmou = st.form_submit_button("Confirmar", type="primary", use_container_width=True)
 
             if confirmou:
                 if responsavel_novo == RESPONSAVEL_NEX_NAO_DEFINIDO:
@@ -1648,7 +1768,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     "data_inicio_producao": datetime.now(),
                 }
 
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
+                ok = FIREBASE.update_fields(collection_name, doc_id, campos)
                 if not ok:
                     st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
                     return
@@ -1659,6 +1779,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     st.warning(erro)
 
                 st.success("Solicita\u00e7\u00e3o atualizada com sucesso.")
+                _limpar_selecao()
                 st.rerun()
             return
 
@@ -1670,37 +1791,54 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
             ]
 
             with st.form(key=f"{key_prefix}_form_resposta"):
-                texto_inicial = valor_texto(sol_sel.get("resposta_nex_texto"))
-                texto_final = st.text_area(
-                    "Texto da resposta",
-                    value=texto_inicial,
-                    height=220,
-                    key=f"{key_prefix}_form_resposta_texto",
-                )
-                arquivos = st.file_uploader(
-                    "Anexar entreg\u00e1veis (imagens e documentos)",
-                    type=["png", "jpg", "jpeg", "webp", "gif", "pdf"],
-                    accept_multiple_files=True,
-                    key=f"{key_prefix}_form_resposta_arquivos",
-                )
-                st.warning("Antes de submeter para confer\u00eancia, fa\u00e7a este checklist final:")
-                st.markdown(
-                    "1. **Confer\u00eancia do escopo:** confira se tudo que foi solicitado est\u00e1 no material entreg\u00e1vel."
-                )
-                st.markdown(
-                    "2. **Confer\u00eancia textual:** revise portugu\u00eas, acentua\u00e7\u00e3o e poss\u00edveis erros de escrita."
-                )
-                st.markdown(
-                    "3. **Confer\u00eancia visual:** verifique distribui\u00e7\u00e3o dos elementos, identidade visual e qualidade final da pe\u00e7a."
-                )
+                c1, c2, c3 = st.columns(3)
+                
+                with c1:
+                    st.markdown("#### \U0001F4D1 Observa\u00e7\u00f5es")
+                    valor_obs = valor_texto(sol_sel.get("resposta_nex_obs"))
+                    texto_obs = st.text_area(
+                        "Obs",
+                        value=valor_obs,
+                        height=280,
+                        key=f"{key_prefix}_form_resposta_obs",
+                        label_visibility="collapsed"
+                    )
 
-                if links_ja_salvos:
-                    render_links_markdown(links_ja_salvos, "Anexos de resposta j\u00e1 salvos")
+                with c2:
+                    st.markdown("#### \U0001F4AC Texto da Resposta")
+                    texto_inicial = valor_texto(sol_sel.get("resposta_nex_texto"))
+                    texto_final = st.text_area(
+                        "Texto",
+                        value=texto_inicial,
+                        height=280,
+                        key=f"{key_prefix}_form_resposta_texto",
+                        label_visibility="collapsed"
+                    )
 
-                submeteu = st.form_submit_button("Submeter para confer\u00eancia", type="primary")
+                with c3:
+                    st.markdown("#### \U0001F4CE Anexar Entreg\u00e1veis")
+                    arquivos = st.file_uploader(
+                        "Upload",
+                        type=["png", "jpg", "jpeg", "webp", "gif", "pdf"],
+                        accept_multiple_files=True,
+                        key=f"{key_prefix}_form_resposta_arquivos",
+                        label_visibility="collapsed"
+                    )
+                    st.markdown("##### Antes de submeter para confer\u00eancia, fa\u00e7a este checklist final:")
+                    st.markdown(
+                        "1. **Escopo:** Confira se tudo solicitado est\u00e1 no material.\n"
+                        "2. **Texto:** Revise portugu\u00eas, acentua\u00e7\u00e3o e erros de escrita.\n"
+                        "3. **Visual:** Verifique identidade, elementos e a qualidade final."
+                    )
+                    if links_ja_salvos:
+                        st.markdown("---")
+                        render_links_markdown(links_ja_salvos, "J\u00e1 salvos")
+
+                submeteu = st.form_submit_button("Submeter para confer\u00eancia", type="primary", use_container_width=True)
 
             if submeteu:
                 texto_final = (texto_final or "").strip()
+                texto_obs = (texto_obs or "").strip()
                 links_resposta = list(links_ja_salvos)
 
                 for arquivo in (arquivos or []):
@@ -1715,12 +1853,13 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
 
                 campos = {
                     "resposta_nex_texto": texto_final,
+                    "resposta_nex_obs": texto_obs,
                     "resposta_nex_anexos": links_resposta,
                     "status": STATUS_CONCLUIDO,
                     "data_resposta_nex": datetime.now(),
                 }
 
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
+                ok = FIREBASE.update_fields(collection_name, doc_id, campos)
                 if not ok:
                     st.error("Falha ao enviar a resposta da solicita\u00e7\u00e3o.")
                     return
@@ -1735,6 +1874,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     st.warning(erro)
 
                 st.success("Resposta submetida para confer\u00eancia.")
+                _limpar_selecao()
                 st.rerun()
             return
 
@@ -1760,7 +1900,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     "parecer_coordenador": (parecer or "").strip(),
                     "data_aprovacao_final": datetime.now(),
                 }
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
+                ok = FIREBASE.update_fields(collection_name, doc_id, campos)
                 if not ok:
                     st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
                     return
@@ -1781,6 +1921,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     st.warning(erro)
 
                 st.success("Solicita\u00e7\u00e3o finalizada com sucesso.")
+                _limpar_selecao()
                 st.rerun()
 
             if retornar:
@@ -1790,7 +1931,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     "parecer_coordenador": (parecer or "").strip(),
                     "data_retorno_producao": datetime.now(),
                 }
-                ok = FIREBASE.update_fields("solicitacoes", doc_id, campos)
+                ok = FIREBASE.update_fields(collection_name, doc_id, campos)
                 if not ok:
                     st.error("Falha ao atualizar a solicita\u00e7\u00e3o.")
                     return
@@ -1801,11 +1942,13 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     st.warning(erro)
 
                 st.warning("Solicita\u00e7\u00e3o retornou para Em andamento.")
+                _limpar_selecao()
                 st.rerun()
 
 
-    def render_detalhes(sol_sel, row_sel, collection_name, colunas_detalhe, rename_map, date_cols, key_prefix):
-        st.markdown("### Visualiza\u00e7\u00e3o completa da solicita\u00e7\u00e3o")
+    def render_detalhes(sol_sel, row_sel, collection_name, colunas_detalhe, rename_map, date_cols, key_prefix, table_prefix=""):
+        st.markdown("### Visualização completa da solicitação")
+        
         with st.container(border=True):
             def valor_campo(campo):
                 if campo in row_sel.index:
@@ -1820,10 +1963,10 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                 return formatar_data_exibicao(valor_campo(campo))
 
             if collection_name == "solicitacoes":
-                col_a, col_b, col_c = st.columns([1.25, 1.25, 1.0])
+                col_a, col_b, col_c = st.columns([1, 1, 1])
 
                 with col_a:
-                    st.markdown("#### Painel")
+                    st.markdown("#### \U0001F4CB Painel")
                     st.markdown(
                         f"**Status atual:** {badge_status_html(sol_sel.get('status', STATUS_PENDENTE))}",
                         unsafe_allow_html=True,
@@ -1833,74 +1976,76 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                     )
                     st.markdown(f"**Tipo:** {texto_campo('tipo')}")
                     st.markdown(f"**Canais:** {texto_campo('canais')}")
-                    st.markdown(f"**Anexos enviados:** {valor_texto(row_sel.get('_anexos_resumo')) or '0 anexo(s)'}")
 
                 with col_b:
-                    st.markdown("#### Solicitante")
+                    st.markdown("#### \U0001F464 Solicitante")
                     st.markdown(f"**Nome:** {texto_campo('solicitante')}")
                     st.markdown(f"**E-mail:** {texto_campo('email')}")
                     st.markdown(f"**Unidade:** {texto_campo('unidade')}")
                     st.markdown(f"**Perfil:** {texto_campo('solicitando_como')}")
 
                 with col_c:
-                    st.markdown("#### Datas")
+                    st.markdown("#### \U0001F4C5 Datas")
                     st.markdown(f"**Publicar em:** {data_campo('data_publicacao')}")
                     st.markdown(f"**Recebido em:** {data_campo('data_solicitacao')}")
                     st.markdown(f"**Produ\u00e7\u00e3o iniciada:** {data_campo('data_inicio_producao')}")
                     st.markdown(f"**Resposta enviada:** {data_campo('data_resposta_nex')}")
 
-                st.markdown("#### Descri\u00e7\u00e3o da demanda")
-                st.markdown(texto_campo("descricao"))
+                # Area de Detalhamento e Acoes em Colunas (1:1:1)
+                c_desc, c_anex, c_acoes = st.columns([1, 1, 1])
+                
+                with c_desc:
+                    st.markdown("#### \U0001F4DD Descri\u00e7\u00e3o da demanda")
+                    st.markdown(texto_campo("descricao"))
+                    
+                    # Se for tecnico, mostra apoios aqui tambem
+                    if collection_name == "solicitacoes_eventos_transmissoes":
+                        apoios = texto_campo("apoios_necessarios", "")
+                        if apoios:
+                            st.markdown(f"**Apoios:** {apoios}")
 
-                anexos_md = row_sel.get("_anexos_markdown", "Sem anexos.")
-                if anexos_md != "Sem anexos.":
-                    st.markdown("#### Anexos da solicita\u00e7\u00e3o")
+                with c_anex:
+                    st.markdown("#### \U0001F4CE Anexos")
+                    anexos_md = row_sel.get("_anexos_markdown", "Sem anexos.")
                     st.markdown(anexos_md)
+                    
+                    # Links de resposta (se houver)
+                    links_resposta = [
+                        u for u in (sol_sel.get("resposta_nex_anexos") or [])
+                        if isinstance(u, str) and u.strip()
+                    ]
+                    if links_resposta:
+                        st.markdown("---")
+                        render_links_markdown(links_resposta, "Entrega (Resposta)")
 
-                texto_resp = valor_texto(sol_sel.get("resposta_nex_texto"))
-                links_resposta = [
-                    u for u in (sol_sel.get("resposta_nex_anexos") or [])
-                    if isinstance(u, str) and u.strip()
-                ]
-                if texto_resp or links_resposta:
-                    st.markdown("#### Entrega da produ\u00e7\u00e3o")
-                    col_resp_txt, col_resp_files = st.columns([1.5, 1.0])
-                    with col_resp_txt:
-                        st.markdown("**Texto de resposta:**")
-                        st.markdown(texto_resp or "-")
-                    with col_resp_files:
-                        if links_resposta:
-                            render_links_markdown(links_resposta, "Anexos da resposta")
-                        else:
-                            st.caption("Sem anexos de resposta.")
-            else:
-                st.markdown(
-                    f"**Status atual:** {badge_status_html(sol_sel.get('status', STATUS_PENDENTE))}",
-                    unsafe_allow_html=True,
-                )
-                if "responsavel_nex" in colunas_detalhe:
-                    st.markdown(
-                        f"**Respons\u00e1vel NEX:** {valor_texto(sol_sel.get('responsavel_nex')) or RESPONSAVEL_NEX_NAO_DEFINIDO}"
-                    )
-
-                for c in colunas_detalhe:
-                    if c in {"status", "responsavel_nex"}:
-                        continue
-                    if c == "anexos":
-                        st.markdown("**Anexos:**")
-                        st.markdown(row_sel.get("_anexos_markdown", "Sem anexos."))
-                        continue
-                    if c not in row_sel.index:
-                        continue
-
-                    valor = row_sel.get(c)
-                    if c in date_cols:
-                        valor_fmt = formatar_data_exibicao(valor)
+                with c_acoes:
+                    st.markdown("#### \U0001F4AA\U0001F3FD Respons\u00e1vel NEX")
+                    # Se pending, mostra o form aqui (pequeno)
+                    if status_eh_pendente(sol_sel.get("status")):
+                        bloco_acoes_detalhe(collection_name, sol_sel, key_prefix, table_prefix=table_prefix)
                     else:
-                        valor_fmt = valor_texto(valor) or "-"
-                    st.markdown(f"**{rename_map.get(c, c)}:** {valor_fmt}")
+                        st.info(f"Aguardando submiss\u00e3o de resposta por **{valor_texto(sol_sel.get('responsavel_nex'))}**.")
+                    
+                    # Resumo de entrega se ja concluido
+                    texto_resp = valor_texto(sol_sel.get("resposta_nex_texto"))
+                    if texto_resp:
+                        with st.expander("Ver texto entregue"):
+                            st.markdown(texto_resp)
 
-            bloco_acoes_detalhe(collection_name, sol_sel, key_prefix)
+                if not status_eh_pendente(sol_sel.get("status")):
+                    bloco_acoes_detalhe(collection_name, sol_sel, key_prefix, table_prefix=table_prefix)
+
+                # Informacoes legadas ou genericas caso existam campos extras (apenas para Apoio Tecnico que usa loop)
+                if collection_name != "solicitacoes":
+                    with st.expander("Informa\u00e7\u00f5es Adicionais"):
+                        for c in colunas_detalhe:
+                            if c in {"status", "responsavel_nex", "descricao", "anexos", "apoios_necessarios"}:
+                                continue
+                            if c not in row_sel.index:
+                                continue
+                            valor = row_sel.get(c)
+                            valor_fmt = formatar_data_exibicao(valor) if c in date_cols else (valor_texto(valor) or "-")
+                            st.markdown(f"**{rename_map.get(c, c)}:** {valor_fmt}")
 
     def render_collection(
         collection_name,
@@ -1961,6 +2106,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                         rename_map,
                         date_cols,
                         f"{table_prefix}_geral_detalhe",
+                        table_prefix=table_prefix,
                     )
             return
 
@@ -2007,6 +2153,18 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
         slot_detalhe_por_tabela = {}
 
         for sec in sections:
+            # Ordena\u00e7\u00e3o por fila: operacionais por prazo ASC, finalizadas por recebimento DESC
+            df_sec = sec["df"]
+            if not df_sec.empty:
+                sn = normalizar_status(sec["status_ref"])
+                if sn in (normalizar_status(STATUS_PENDENTE), normalizar_status(STATUS_EM_PRODUCAO_ARTES)):
+                    if "data_publicacao" in df_sec.columns:
+                        df_sec = df_sec.sort_values("data_publicacao", ascending=True, na_position="last").reset_index(drop=True)
+                else:
+                    if "data_solicitacao" in df_sec.columns:
+                        df_sec = df_sec.sort_values("data_solicitacao", ascending=False, na_position="last").reset_index(drop=True)
+                sec["df"] = df_sec
+
             table_id = sec["table_id"]
             state_key = f"{table_id}_selected_doc"
             secao_por_tabela[table_id] = sec
@@ -2083,6 +2241,7 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
                         rename_map,
                         date_cols,
                         sec["detail_key"],
+                        table_prefix=table_prefix,
                     )
 
 
@@ -2188,12 +2347,13 @@ def page_todas_solicitacoes(tipo_pagina: str = "ambas"):
             separar_por_status=False,
         )
 
-def page_todas_solicitacoes_criativos():
-    page_todas_solicitacoes(tipo_pagina="criativos")
-
-
-def page_todas_solicitacoes_apoio_tecnico():
-    page_todas_solicitacoes(tipo_pagina="apoio")
+def page_painel_controle_nex():
+    st.header("Painel de Controle NEX")
+    tab_criativos, tab_apoio = st.tabs(["\U0001F3A8 Solicita\u00e7\u00e3o de Criativos e Divulga\u00e7\u00e3o", "\U0001F3A5 Solicita\u00e7\u00e3o de Apoio T\u00e9cnico a Eventos e Transmiss\u00f5es"])
+    with tab_criativos:
+        page_todas_solicitacoes(tipo_pagina="criativos")
+    with tab_apoio:
+        page_todas_solicitacoes(tipo_pagina="apoio")
 
 
 def page_sobre():
@@ -2426,19 +2586,26 @@ Esta plataforma organiza solicitações em um pipeline rastreável, com dados pe
     )
     render_persistent_footer()
 
+def page_nova_solicitacao():
+    render_header_banner()
+    st.markdown("# Central de Solicitações")
+    tab_publicacao, tab_apoio = st.tabs(["🎨 Solicitação de Criativos e Divulgação", "🎥 Solicitação de Apoio Técnico a Eventos e Transmissões"])
+    with tab_publicacao:
+        page_solicitar_publicacao()
+    with tab_apoio:
+        page_solicitar_apoio_eventos_transmissoes()
+
 # Montagem das Paginas e Menu Lateral
 pg = st.navigation({
-    "Central de Solicita\u00e7\u00f5es": [
-        st.Page(page_solicitar_publicacao, title="Solicita\u00e7\u00e3o de Criativos e Divulga\u00e7\u00e3o", icon="\U0001F3A8", default=True),
-        st.Page(page_solicitar_apoio_eventos_transmissoes, title="Solicita\u00e7\u00e3o de Apoio T\u00e9cnico a Eventos e Transmiss\u00f5es", icon="\U0001F3A5")
+    "Central de Solicitações": [
+        st.Page(page_nova_solicitacao, title="Nova Solicitação", icon="\U0001F4DD", default=True),
     ],
     "Painel de Controle NEX": [
-        st.Page(page_todas_solicitacoes_criativos, title="Solicita\u00e7\u00f5es de Criativos", icon="\U0001F4CB"),
-        st.Page(page_todas_solicitacoes_apoio_tecnico, title="Solicita\u00e7\u00f5es de Apoio T\u00e9cnico", icon="\U0001F39A")
+        st.Page(page_painel_controle_nex, title="Central de Demandas", icon="\U0001F4CB"),
     ],
-    "Em Constru\u00e7\u00e3o": [
-        st.Page(page_dashboard_solicitacoes, title="Gerador de Proposta de Conte\u00fado", icon="\U0001F4CA"),
-        st.Page(page_adicionar_noticia, title="Publicar Not\u00edcia no site do DEST", icon="\U0001F4F0")
+    "Em Construção": [
+        st.Page(page_dashboard_solicitacoes, title="Gerador de Proposta de Conteúdo", icon="\U0001F4CA"),
+        st.Page(page_adicionar_noticia, title="Publicar Notícia no site do DEST", icon="\U0001F4F0")
     ],
     "Sobre": [
         st.Page(page_sobre, title="Sobre a Plataforma", icon="\u2139")

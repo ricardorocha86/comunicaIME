@@ -66,7 +66,12 @@ class FirebaseClient:
         if "booleanValue" in raw:
             return bool(raw["booleanValue"])
         if "timestampValue" in raw:
-            return raw["timestampValue"]
+            try:
+                ts_str = raw["timestampValue"]
+                dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                return dt.replace(tzinfo=None)
+            except Exception:
+                return raw["timestampValue"]
         if "nullValue" in raw:
             return None
         if "arrayValue" in raw:
